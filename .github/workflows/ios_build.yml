@@ -34,8 +34,8 @@ jobs:
       - name: Flutter Build IPA
         run: |
           flutter pub get
-          # On force le build propre et l'exportation via ton plist
-          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist --build-name=1.0.0 --build-number=1
+          # L'ajout de --no-codesign est la clé ici
+          flutter build ipa --release --no-codesign --export-options-plist=ios/ExportOptions.plist
 
       - name: List files (Debug - pour voir si l'IPA existe)
         run: find build/ios -name "*.ipa"
