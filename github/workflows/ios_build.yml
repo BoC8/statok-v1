@@ -1,0 +1,44 @@
+name: "Build iOS IPA"
+
+on:
+  push:
+    branches: [ "main" ] # Le build se lancera à chaque push sur la branche main
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          architecture: x64
+
+      - name: Install Provisioning Profile
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "${{ secrets.MOBILEPROVISION_BASE64 }}" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+
+      - name: Import Certificate (.p12)
+        run: |
+          echo "${{ secrets.P12_BASE64 }}" | base64 --decode > certificate.p12
+          security create-keychain -p "${{ secrets.KEYCHAIN_PASSWORD }}" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "${{ secrets.KEYCHAIN_PASSWORD }}" build.keychain
+          security import certificate.p12 -k build.keychain -P "${{ secrets.P12_PASSWORD }}" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${{ secrets.KEYCHAIN_PASSWORD }}" build.keychain
+
+      - name: Flutter Build IPA
+        run: |
+          flutter pub get
+          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+          # Note: Si tu n'as pas de fichier ExportOptions.plist, on peut le générer via le script
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-ipa
+          path: build/ios/ipa/*.ipa
