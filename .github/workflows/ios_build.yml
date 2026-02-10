@@ -34,7 +34,7 @@ jobs:
       - name: Flutter Build IPA
         run: |
           flutter pub get
-          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist --no-codesign
           # Note: Si tu n'as pas de fichier ExportOptions.plist, on peut le générer via le script
 
       - name: Upload IPA Artifact
