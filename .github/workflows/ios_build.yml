@@ -31,12 +31,18 @@ jobs:
           security import certificate.p12 -k build.keychain -P "${{ secrets.P12_PASSWORD }}" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${{ secrets.KEYCHAIN_PASSWORD }}" build.keychain
 
-      - name: Flutter Build IPA
+      name: Flutter Build IPA
         run: |
           flutter pub get
-          # On build l'IPA. Si le no-codesign bloquait l'export, 
-          # on s'assure que le certificat importé est bien utilisé.
-          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+          # 1. On crée l'archive SANS signature (pour éviter l'erreur de certificat dev)
+          flutter build ipa --release --no-codesign
+          
+          # 2. On exporte l'IPA manuellement en utilisant ton certificat de distribution
+          xcodebuild -exportArchive \
+            -archivePath build/ios/archive/Runner.xcarchive \
+            -exportPath build/ios/ipa \
+            -exportOptionsPlist ios/ExportOptions.plist \
+            -allowProvisioningUpdates
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
