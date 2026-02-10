@@ -34,13 +34,17 @@ jobs:
       - name: Flutter Build IPA
         run: |
           flutter pub get
-          # On ajoute --no-codesign ici pour laisser l'export gérer la signature
-          flutter build ipa --release --no-codesign --export-options-plist=ios/ExportOptions.plist
+          # On génère d'abord l'archive, puis on demande l'exportation explicitement
+          flutter build ipa --release --no-codesign
+          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+
+      - name: List files (Debug)
+        run: find build/ios -name "*.ipa" -or -name "*.app"
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-ipa
-          path: |
-            build/ios/ipa/*.ipa
-            build/ios/iphoneos/*.app
+          # On utilise une recherche récursive totale pour ne rien rater
+          path: "**/*.ipa"
+          if-no-files-found: error
