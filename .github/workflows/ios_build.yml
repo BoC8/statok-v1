@@ -2,7 +2,7 @@ name: "Build iOS IPA"
 
 on:
   push:
-    branches: [ "main" ] # Le build se lancera à chaque push sur la branche main
+    branches: [ "main" ]
 
 jobs:
   build:
@@ -34,17 +34,16 @@ jobs:
       - name: Flutter Build IPA
         run: |
           flutter pub get
-          # On génère d'abord l'archive, puis on demande l'exportation explicitement
-          flutter build ipa --release --no-codesign
-          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+          # On force le build propre et l'exportation via ton plist
+          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist --build-name=1.0.0 --build-number=1
 
-      - name: List files (Debug)
-        run: find build/ios -name "*.ipa" -or -name "*.app"
+      - name: List files (Debug - pour voir si l'IPA existe)
+        run: find build/ios -name "*.ipa"
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-ipa
-          # On utilise une recherche récursive totale pour ne rien rater
+          # Recherche récursive pour être sûr de trouver le fichier
           path: "**/*.ipa"
           if-no-files-found: error
