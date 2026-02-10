@@ -34,16 +34,16 @@ jobs:
       - name: Flutter Build IPA
         run: |
           flutter pub get
-          # L'ajout de --no-codesign est la clé ici
-          flutter build ipa --release --no-codesign --export-options-plist=ios/ExportOptions.plist
-
-      - name: List files (Debug - pour voir si l'IPA existe)
-        run: find build/ios -name "*.ipa"
+          # On build l'IPA. Si le no-codesign bloquait l'export, 
+          # on s'assure que le certificat importé est bien utilisé.
+          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-ipa
-          # Recherche récursive pour être sûr de trouver le fichier
-          path: "**/*.ipa"
+          # On cherche l'IPA, mais AUSSI le dossier .app au cas où
+          path: |
+            build/ios/ipa/*.ipa
+            build/ios/iphoneos/*.app
           if-no-files-found: error
