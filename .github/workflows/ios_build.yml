@@ -31,7 +31,7 @@ jobs:
           security import certificate.p12 -k build.keychain -P "${{ secrets.P12_PASSWORD }}" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${{ secrets.KEYCHAIN_PASSWORD }}" build.keychain
 
-      name: Flutter Build IPA
+      - name: Flutter Build IPA
         run: |
           flutter pub get
           # 1. On crée l'archive SANS signature (pour éviter l'erreur de certificat dev)
