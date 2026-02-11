@@ -19,10 +19,8 @@ jobs:
       - name: Install Provisioning Profile
         run: |
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo "${{ secrets.MOBILEPROVISION_BASE64 }}" | base64 --decode > profile.mobileprovision
-          # Extraction de l'UUID pour un enregistrement correct dans le système macOS
-          UUID=$(grep -aA1 "UUID" profile.mobileprovision | grep -o "[-A-Z0-9]\{36\}")
-          cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
+          # On décode le secret directement dans le dossier attendu par Apple
+          echo "${{ secrets.MOBILEPROVISION_BASE64 }}" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/Statok_Distribution_Profile.mobileprovision
 
       - name: Import Certificate (.p12)
         run: |
