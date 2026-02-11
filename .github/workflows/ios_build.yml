@@ -34,8 +34,8 @@ jobs:
       - name: Flutter Build IPA
         run: |
           flutter pub get
-          # Build de l'archive et export de l'IPA signé
-          flutter build ipa --release --no-codesign --export-options-plist=ios/ExportOptions.plist
+          # On retire le --no-codesign pour forcer l'exportation réelle puisque tes secrets sont maintenant corrects
+          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
