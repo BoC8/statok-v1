@@ -54,3 +54,16 @@ jobs:
             build/ios/archive/Runner.xcarchive
             build/ios/iphoneos/*.app
           if-no-files-found: error
+          
+      - name: Upload to App Store Connect
+        run: |
+          # Création du dossier pour la clé API
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "${{ secrets.APP_STORE_CONNECT_KEY_CONTENT }}" > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8
+
+          # Envoi de l'IPA vers TestFlight / App Store Connect
+          xcrun altool --upload-app \
+            --type ios \
+            --file build/ios/ipa/*.ipa \
+            --apiKey ${{ secrets.APP_STORE_CONNECT_KEY_ID }} \
+            --apiIssuer ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
