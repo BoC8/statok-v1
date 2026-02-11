@@ -48,13 +48,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-ipa
-          # On cherche partout : l'IPA s'il existe, sinon l'archive complète
+          # On cherche partout : l'IPA s'il existe, sinon l'archive complète !
           path: |
             build/ios/ipa/*.ipa
             build/ios/archive/Runner.xcarchive
             build/ios/iphoneos/*.app
           if-no-files-found: error
-          
+
       - name: Upload to App Store Connect
         run: |
           # Création du dossier pour la clé API
