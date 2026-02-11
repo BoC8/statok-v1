@@ -20,7 +20,7 @@ jobs:
         run: |
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           echo "${{ secrets.MOBILEPROVISION_BASE64 }}" | base64 --decode > profile.mobileprovision
-          # Cette ligne est cruciale : elle renomme le profil avec son vrai identifiant interne (UUID)
+          # Extraction de l'UUID pour un enregistrement correct dans le système macOS
           UUID=$(grep -aA1 "UUID" profile.mobileprovision | grep -o "[-A-Z0-9]\{36\}")
           cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
 
@@ -36,7 +36,7 @@ jobs:
       - name: Flutter Build IPA
         run: |
           flutter pub get
-          # On utilise --no-codesign pour l'archive, puis l'export se chargera de la signature réelle
+          # Build de l'archive et export de l'IPA signé
           flutter build ipa --release --no-codesign --export-options-plist=ios/ExportOptions.plist
 
       - name: Upload IPA Artifact
