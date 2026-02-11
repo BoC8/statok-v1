@@ -15,12 +15,14 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-          architecture: x64
 
       - name: Install Provisioning Profile
         run: |
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo "${{ secrets.MOBILEPROVISION_BASE64 }}" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+          echo "${{ secrets.MOBILEPROVISION_BASE64 }}" | base64 --decode > profile.mobileprovision
+          # Cette ligne est cruciale : elle renomme le profil avec son vrai identifiant interne (UUID)
+          UUID=$(grep -aA1 "UUID" profile.mobileprovision | grep -o "[-A-Z0-9]\{36\}")
+          cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
 
       - name: Import Certificate (.p12)
         run: |
@@ -34,22 +36,12 @@ jobs:
       - name: Flutter Build IPA
         run: |
           flutter pub get
-          # 1. On crée l'archive SANS signature (pour éviter l'erreur de certificat dev)
-          flutter build ipa --release --no-codesign
-          
-          # 2. On exporte l'IPA manuellement en utilisant ton certificat de distribution
-          xcodebuild -exportArchive \
-            -archivePath build/ios/archive/Runner.xcarchive \
-            -exportPath build/ios/ipa \
-            -exportOptionsPlist ios/ExportOptions.plist \
-            -allowProvisioningUpdates
+          # On utilise --no-codesign pour l'archive, puis l'export se chargera de la signature réelle
+          flutter build ipa --release --no-codesign --export-options-plist=ios/ExportOptions.plist
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-ipa
-          # On cherche l'IPA, mais AUSSI le dossier .app au cas où
-          path: |
-            build/ios/ipa/*.ipa
-            build/ios/iphoneos/*.app
+          path: build/ios/ipa/*.ipa
           if-no-files-found: error

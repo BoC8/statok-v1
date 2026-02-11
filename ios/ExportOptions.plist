@@ -11,7 +11,7 @@
     <key>provisioningProfiles</key>
     <dict>
         <key>com.example.statok</key>
-        <string>profile</string>
+        <string>Statok_Distribution_Profile</string>
     </dict>
 </dict>
 </plist>
