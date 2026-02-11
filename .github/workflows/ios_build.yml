@@ -34,8 +34,15 @@ jobs:
       - name: Flutter Build IPA
         run: |
           flutter pub get
-          # On retire le --no-codesign pour forcer l'exportation réelle puisque tes secrets sont maintenant corrects
-          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+          # 1. On crée l'archive (le .app) sans vérifier les certificats locaux
+          flutter build ipa --release --no-codesign
+          
+          # 2. On transforme l'archive en vrai .ipa SIGNÉ via xcodebuild
+          xcodebuild -exportArchive \
+            -archivePath build/ios/archive/Runner.xcarchive \
+            -exportPath build/ios/ipa \
+            -exportOptionsPlist ios/ExportOptions.plist \
+            -allowProvisioningUpdates
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
