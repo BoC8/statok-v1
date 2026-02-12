@@ -456,7 +456,7 @@ class _CalendrierPageState extends State<CalendrierPage> {
             children: [
               Icon(Icons.access_time, color: subTextColor, size: 12),
               const SizedBox(width: 4),
-              Text("${DateFormat('dd/MM').format(event.date)} - ${event.heure} - ${event.lieu}", style: TextStyle(color: subTextColor, fontWeight: FontWeight.bold, fontSize: 11)),
+              Text("${DateFormat('dd/MM').format(event.date)} - ${_formatHeure(event.heure)} - ${event.lieu}", style: TextStyle(color: subTextColor, fontWeight: FontWeight.bold, fontSize: 11)),
             ],
           )
         ],
@@ -534,7 +534,7 @@ class _CalendrierPageState extends State<CalendrierPage> {
                                               : "${event.butsGjpb}-${event.butsAdv}",
                                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                         )
-                                      : Text(event.heure ?? '?', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.bleuMarine)),
+                                      : Text(_formatHeure(event.heure), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.bleuMarine)),
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -721,5 +721,15 @@ class _CalendrierPageState extends State<CalendrierPage> {
         ),
       ),
     );
+  }
+
+  String _formatHeure(String? heure) {
+    if (heure == null || heure.trim().isEmpty) return '?';
+    final clean = heure.trim();
+    final parts = clean.split(':');
+    if (parts.length >= 2) {
+      return '${parts[0].padLeft(2, '0')}:${parts[1].padLeft(2, '0')}';
+    }
+    return clean;
   }
 }
