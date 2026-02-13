@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -413,7 +413,7 @@ String _getCurrentStreak() {
   Widget _buildEmptyCard(String text) {
     return Container(
       width: double.infinity,
-      height: 120,
+      height: 150,
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
       child: Center(child: Text(text, style: const TextStyle(color: Colors.grey, fontSize: 12))),
     );
@@ -429,6 +429,7 @@ String _getCurrentStreak() {
 
     return Container(
       width: double.infinity,
+      height: 150,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -494,6 +495,8 @@ String _getCurrentStreak() {
   Widget _buildChartsSection() {
     final stats = _getFilteredStats();
     double total = stats['total']!;
+    final double butsMarquesParMatch = total > 0 ? (stats['bm']! / total) : 0.0;
+    final double butsEncaissesParMatch = total > 0 ? (stats['be']! / total) : 0.0;
 
     if (total == 0) return const Center(child: Padding(padding: EdgeInsets.all(20), child: Text("Aucun match avec ces filtres")));
 
@@ -557,22 +560,58 @@ String _getCurrentStreak() {
         const SizedBox(height: 10),
 
         Container(
-          height: 180,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-          child: Row(
+          child: Column(
             children: [
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  _LegendItem(color: AppTheme.bleuMarine, text: "Marqués"),
-                  _LegendItem(color: Colors.redAccent, text: "Encaissés"),
-                ],
+              SizedBox(
+                height: 180,
+                child: Row(
+                  children: [
+                    const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _LegendItem(color: AppTheme.bleuMarine, text: "Buts marqués"),
+                        _LegendItem(color: Colors.redAccent, text: "Buts encaissés"),
+                      ],
+                    ),
+                    const SizedBox(width: 20),
+                    Expanded(
+                      child: PieChart(
+                        PieChartData(
+                          sections: sectionsButs,
+                          centerSpaceRadius: 40,
+                          sectionsSpace: 2,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: PieChart(PieChartData(sections: sectionsButs, centerSpaceRadius: 40, sectionsSpace: 2)),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                decoration: BoxDecoration(color: AppTheme.bleuMarine, borderRadius: BorderRadius.circular(8)),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text("Buts marqués / match :", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    Text(butsMarquesParMatch.toStringAsFixed(2), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(8)),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text("Buts encaissés / match :", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    Text(butsEncaissesParMatch.toStringAsFixed(2), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                  ],
+                ),
               ),
             ],
           ),

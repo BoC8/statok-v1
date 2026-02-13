@@ -56,8 +56,10 @@ class HomePage extends StatelessWidget {
           final int rows = (menuCount / columns).ceil();
           final double availableWidth = constraints.maxWidth - (padding * 2);
           final double availableHeight = constraints.maxHeight - (padding * 2);
-          final double itemWidth = (availableWidth - (spacing * (columns - 1))) / columns;
-          final double itemHeight = (availableHeight - (spacing * (rows - 1))) / rows;
+          final double itemWidth =
+              (availableWidth - (spacing * (columns - 1))) / columns;
+          final double itemHeight =
+              (availableHeight - (spacing * (rows - 1))) / rows;
 
           return Stack(
             children: [
@@ -65,11 +67,11 @@ class HomePage extends StatelessWidget {
                 child: IgnorePointer(
                   child: Center(
                     child: Opacity(
-                      opacity: 0.28,
+                      opacity: 0.4,
                       child: Image.asset(
                         'assets/images/logo-gjpb.png',
                         fit: BoxFit.contain,
-                        width: constraints.maxWidth * 0.8,
+                        width: constraints.maxWidth * 0.7,
                       ),
                     ),
                   ),
@@ -85,30 +87,31 @@ class HomePage extends StatelessWidget {
                   physics: const NeverScrollableScrollPhysics(),
                   children: [
                     MenuCard(
-              title: 'Calendrier',
-              icon: Icons.calendar_month,
-              onTap: () => _navigateTo(context, const CalendrierPage()),
-            ),
-            MenuCard(
-              title: 'Résultats',
-              icon: Icons.emoji_events,
-              onTap: () => _navigateTo(context, const ResultatsPage()),
-            ),
-            MenuCard(
-              title: 'Stats Joueurs',
-              icon: Icons.bar_chart,
-              onTap: () => _navigateTo(context, const StatsPage()),
-            ),
-            MenuCard(
-              title: 'Équipes',
-              icon: Icons.groups,
-              onTap: () => _navigateTo(context, const EquipesSelectionPage()),
-            ),
-            MenuCard(
-              title: 'Vidéos',
-              icon: Icons.play_circle_fill,
-              onTap: () => _navigateTo(context, const VideosPage()),
-            ),
+                      title: 'Calendrier',
+                      icon: Icons.calendar_month,
+                      onTap: () => _navigateTo(context, const CalendrierPage()),
+                    ),
+                    MenuCard(
+                      title: 'Résultats',
+                      icon: Icons.emoji_events,
+                      onTap: () => _navigateTo(context, const ResultatsPage()),
+                    ),
+                    MenuCard(
+                      title: 'Stats Joueurs',
+                      icon: Icons.bar_chart,
+                      onTap: () => _navigateTo(context, const StatsPage()),
+                    ),
+                    MenuCard(
+                      title: 'Équipes',
+                      icon: Icons.groups,
+                      onTap: () =>
+                          _navigateTo(context, const EquipesSelectionPage()),
+                    ),
+                    MenuCard(
+                      title: 'Vidéos',
+                      icon: Icons.play_circle_fill,
+                      onTap: () => _navigateTo(context, const VideosPage()),
+                    ),
                     MenuCard(
                       title: 'Le Club',
                       icon: Icons.info,
@@ -125,9 +128,6 @@ class HomePage extends StatelessWidget {
   }
 
   void _navigateTo(BuildContext context, Widget page) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => page),
-    );
+    Navigator.push(context, MaterialPageRoute(builder: (context) => page));
   }
 }

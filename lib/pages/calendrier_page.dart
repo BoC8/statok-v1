@@ -397,7 +397,7 @@ class _CalendrierPageState extends State<CalendrierPage> {
                            const SizedBox(width: 8),
                          ],
                          Text(
-                           e == 'Tout' ? 'Toutes $label' : e, 
+                           e == 'Tout' ? 'Tout' : e, 
                            style: TextStyle(fontSize: 13, color: textColor, fontWeight: (label == "Compétition" && e != 'Tout') ? FontWeight.bold : FontWeight.normal), 
                            overflow: TextOverflow.ellipsis
                          ),

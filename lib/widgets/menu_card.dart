@@ -20,6 +20,7 @@ class MenuCard extends StatelessWidget {
     return Card(
       elevation: 4, 
       shadowColor: Colors.black26,
+      color: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),
@@ -29,14 +30,20 @@ class MenuCard extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.50),
+              width: 1,
+            ),
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                colorOverride ?? Colors.white,
+                colorOverride != null
+                    ? colorOverride!.withValues(alpha: 0.80)
+                    : Colors.white.withValues(alpha: 0.72),
                 colorOverride != null 
-                    ? colorOverride!.withOpacity(0.8) 
-                    : Colors.grey.shade50,
+                    ? colorOverride!.withValues(alpha: 0.65)
+                    : Colors.grey.shade50.withValues(alpha: 0.62),
               ],
             ),
           ),

@@ -298,7 +298,7 @@ class _ResultatsPageState extends State<ResultatsPage> {
                            const SizedBox(width: 8),
                          ],
                          Text(
-                           e == 'Tout' ? 'Toutes $label' : e, 
+                           e == 'Tout' ? 'Tout' : e, 
                            style: TextStyle(fontSize: 13, color: textColor, fontWeight: (label == "Compétition" && e != 'Tout') ? FontWeight.bold : FontWeight.normal), 
                            overflow: TextOverflow.ellipsis
                          ),
@@ -324,6 +324,14 @@ class _ResultatsPageState extends State<ResultatsPage> {
     // Compter les occurrences pour détecter les triplés
     Map<String, int> buteursCount = _compterOccurrences(match.buteurs);
     Map<String, int> passeursCount = _compterOccurrences(match.passeurs);
+    final buteursSorted = buteursCount.entries.toList()
+      ..sort((a, b) => b.value != a.value
+          ? b.value.compareTo(a.value)
+          : a.key.compareTo(b.key));
+    final passeursSorted = passeursCount.entries.toList()
+      ..sort((a, b) => b.value != a.value
+          ? b.value.compareTo(a.value)
+          : a.key.compareTo(b.key));
     
     bool hasStats = match.buteurs.isNotEmpty || match.passeurs.isNotEmpty;
     bool isAway = match.lieu.toUpperCase().startsWith('EXT');
@@ -484,7 +492,7 @@ class _ResultatsPageState extends State<ResultatsPage> {
                                   if (match.buteurs.isEmpty)
                                      const Text("-", style: TextStyle(fontSize: 12, color: Colors.grey))
                                   else
-                                    ...buteursCount.entries.map((entry) {
+                                    ...buteursSorted.map((entry) {
                                       final nom = entry.key;
                                       final count = entry.value;
                                       return Padding(
@@ -538,7 +546,7 @@ class _ResultatsPageState extends State<ResultatsPage> {
                                    if (match.passeurs.isEmpty)
                                      const Text("-", style: TextStyle(fontSize: 12, color: Colors.grey))
                                   else
-                                    ...passeursCount.entries.map((entry) {
+                                    ...passeursSorted.map((entry) {
                                       final nom = entry.key;
                                       final count = entry.value;
                                       return Padding(
