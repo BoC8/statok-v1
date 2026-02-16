@@ -66,4 +66,4 @@ jobs:
             --type ios \
             --file build/ios/ipa/*.ipa \
             --apiKey ${{ secrets.APP_STORE_CONNECT_KEY_ID }} \
-            --apiIssuer ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+            --apiIssuer ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }} 
