@@ -26,11 +26,11 @@ class StatsPage extends StatefulWidget {
 
 class _StatsPageState extends State<StatsPage> {
   final SupabaseClient _client = Supabase.instance.client;
+  final PageController _pageController = PageController(initialPage: 0);
 
   // --- VARIABLES D'Ã‰TAT ---
   bool _isLoading = true;
   List<PlayerStats> _allStats = []; // Stats brutes
-  List<PlayerStats> _displayedStats = []; // Stats filtrÃ©es et triÃ©es
 
   // Filtres
   String _filtreEquipe = 'Tout';
@@ -45,6 +45,12 @@ class _StatsPageState extends State<StatsPage> {
   void initState() {
     super.initState();
     _chargerStats();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 
   Future<void> _chargerStats() async {
@@ -107,7 +113,6 @@ class _StatsPageState extends State<StatsPage> {
 
       setState(() {
         _allStats = computed;
-        _trierStats(); // Applique le tri selon le mode sÃ©lectionnÃ©
         _isLoading = false;
       });
 
@@ -117,25 +122,25 @@ class _StatsPageState extends State<StatsPage> {
     }
   }
 
-  void _trierStats() {
+  List<PlayerStats> _getSortedStatsForTab(int tabIndex) {
     List<PlayerStats> sorted = List.from(_allStats);
 
-    if (_selectedTab == 0) {
-      // BUTEURS : Buts > Passes > Nom
+    if (tabIndex == 0) {
+      // BUTEURS : Buts > Passes
       sorted.sort((a, b) {
         int cmp = b.goals.compareTo(a.goals);
         if (cmp != 0) return cmp;
         return b.assists.compareTo(a.assists);
       });
-    } else if (_selectedTab == 1) {
-      // PASSEURS : Passes > Buts > Nom
+    } else if (tabIndex == 1) {
+      // PASSEURS : Passes > Buts
       sorted.sort((a, b) {
         int cmp = b.assists.compareTo(a.assists);
         if (cmp != 0) return cmp;
         return b.goals.compareTo(a.goals);
       });
     } else {
-      // MIXTE : Total > Buts > Passes
+      // MIXTE : Total > Buts
       sorted.sort((a, b) {
         int cmp = b.total.compareTo(a.total);
         if (cmp != 0) return cmp;
@@ -143,9 +148,7 @@ class _StatsPageState extends State<StatsPage> {
       });
     }
 
-    setState(() {
-      _displayedStats = sorted;
-    });
+    return sorted;
   }
 
   Color _getColorForCompet(String compet) {
@@ -198,49 +201,21 @@ class _StatsPageState extends State<StatsPage> {
 
           // 3. CONTENU (PODIUM + LISTE)
           Expanded(
-            child: _isLoading 
-              ? const Center(child: CircularProgressIndicator())
-              : _displayedStats.isEmpty
-                ? const Center(child: Text("Aucune statistique disponible."))
-                : CustomScrollView(
-                    slivers: [
-                      // PODIUM (Seulement s'il y a au moins 1 joueur)
-                      if (_displayedStats.isNotEmpty)
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 20),
-                            child: _buildPodium(),
-                          ),
-                        ),
-                      
-                      // LISTE (Ã€ partir du 4Ã¨me joueur)
-                      if (_displayedStats.length > 3)
-                        SliverList(
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) {
-                              // On dÃ©cale l'index de 3 car les 3 premiers sont sur le podium
-                              final realIndex = index + 3;
-                              final player = _displayedStats[realIndex];
-                              final prevPlayer = _displayedStats[realIndex - 1];
-                              
-                              // Gestion Ã©galitÃ© : Si score == score prÃ©cÃ©dent, on met "-"
-                              String rankStr = "${realIndex + 1}";
-                              int currentScore = _selectedTab == 0 ? player.goals : (_selectedTab == 1 ? player.assists : player.total);
-                              int prevScore = _selectedTab == 0 ? prevPlayer.goals : (_selectedTab == 1 ? prevPlayer.assists : prevPlayer.total);
-                              
-                              if (currentScore == prevScore) {
-                                rankStr = "-";
-                              }
-
-                              return _buildStatRow(player, rankStr);
-                            },
-                            childCount: _displayedStats.length - 3,
-                          ),
-                        ),
-                        
-                      const SliverPadding(padding: EdgeInsets.only(bottom: 40)),
-                    ],
-                  ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _allStats.isEmpty
+                    ? const Center(child: Text("Aucune statistique disponible."))
+                    : PageView(
+                        controller: _pageController,
+                        onPageChanged: (index) {
+                          setState(() => _selectedTab = index);
+                        },
+                        children: [
+                          _buildClassementContent(0),
+                          _buildClassementContent(1),
+                          _buildClassementContent(2),
+                        ],
+                      ),
           ),
         ],
       ),
@@ -254,10 +229,12 @@ class _StatsPageState extends State<StatsPage> {
     return Expanded(
       child: GestureDetector(
         onTap: () {
-          setState(() {
-            _selectedTab = index;
-            _trierStats();
-          });
+          setState(() => _selectedTab = index);
+          _pageController.animateToPage(
+            index,
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeInOut,
+          );
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
@@ -280,36 +257,71 @@ class _StatsPageState extends State<StatsPage> {
     );
   }
 
-  Widget _buildPodium() {
+  Widget _buildClassementContent(int tabIndex) {
+    final stats = _getSortedStatsForTab(tabIndex);
+
+    return CustomScrollView(
+      slivers: [
+        if (stats.isNotEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: _buildPodium(stats, tabIndex),
+            ),
+          ),
+        if (stats.length > 3)
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final realIndex = index + 3;
+                final player = stats[realIndex];
+                final prevPlayer = stats[realIndex - 1];
+
+                String rankStr = "${realIndex + 1}";
+                int currentScore = tabIndex == 0 ? player.goals : (tabIndex == 1 ? player.assists : player.total);
+                int prevScore = tabIndex == 0 ? prevPlayer.goals : (tabIndex == 1 ? prevPlayer.assists : prevPlayer.total);
+                if (currentScore == prevScore) rankStr = "-";
+
+                return _buildStatRow(player, rankStr, tabIndex);
+              },
+              childCount: stats.length - 3,
+            ),
+          ),
+        const SliverPadding(padding: EdgeInsets.only(bottom: 40)),
+      ],
+    );
+  }
+
+  Widget _buildPodium(List<PlayerStats> stats, int tabIndex) {
     // RÃ©cupÃ©ration sÃ©curisÃ©e des 3 premiers
-    PlayerStats? first = _displayedStats.isNotEmpty ? _displayedStats[0] : null;
-    PlayerStats? second = _displayedStats.length > 1 ? _displayedStats[1] : null;
-    PlayerStats? third = _displayedStats.length > 2 ? _displayedStats[2] : null;
+    PlayerStats? first = stats.isNotEmpty ? stats[0] : null;
+    PlayerStats? second = stats.length > 1 ? stats[1] : null;
+    PlayerStats? third = stats.length > 2 ? stats[2] : null;
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.end, // Aligner en bas
       children: [
         // 2ND PLACE (Gauche)
-        if (second != null) _buildPodiumStep(second, 2, 120, const Color(0xFFC0C0C0)), // Argent
+        if (second != null) _buildPodiumStep(second, 2, 120, const Color(0xFFC0C0C0), tabIndex), // Argent
         
         // 1ST PLACE (Centre, plus grand)
-        if (first != null) _buildPodiumStep(first, 1, 150, const Color(0xFFFFD700)), // Or
+        if (first != null) _buildPodiumStep(first, 1, 150, const Color(0xFFFFD700), tabIndex), // Or
         
         // 3RD PLACE (Droite)
-        if (third != null) _buildPodiumStep(third, 3, 100, const Color(0xFFCD7F32)), // Bronze
+        if (third != null) _buildPodiumStep(third, 3, 100, const Color(0xFFCD7F32), tabIndex), // Bronze
       ],
     );
   }
 
-  Widget _buildPodiumStep(PlayerStats player, int rank, double height, Color color) {
-    int score = _selectedTab == 0 ? player.goals : (_selectedTab == 1 ? player.assists : player.total);
-    String mainLabel = _selectedTab == 0
+  Widget _buildPodiumStep(PlayerStats player, int rank, double height, Color color, int tabIndex) {
+    int score = tabIndex == 0 ? player.goals : (tabIndex == 1 ? player.assists : player.total);
+    String mainLabel = tabIndex == 0
         ? _formatButs(score)
-        : (_selectedTab == 1 ? _formatPasses(score) : "$score total");
+        : (tabIndex == 1 ? _formatPasses(score) : "$score total");
     String? secondaryLabel;
-    if (_selectedTab == 0) secondaryLabel = _formatPasses(player.assists);
-    if (_selectedTab == 1) secondaryLabel = _formatButs(player.goals);
+    if (tabIndex == 0) secondaryLabel = _formatPasses(player.assists);
+    if (tabIndex == 1) secondaryLabel = _formatButs(player.goals);
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -366,12 +378,12 @@ class _StatsPageState extends State<StatsPage> {
     );
   }
 
-  Widget _buildStatRow(PlayerStats player, String rank) {
-    int mainScore = _selectedTab == 0 ? player.goals : (_selectedTab == 1 ? player.assists : player.total);
+  Widget _buildStatRow(PlayerStats player, String rank, int tabIndex) {
+    int mainScore = tabIndex == 0 ? player.goals : (tabIndex == 1 ? player.assists : player.total);
     // Info secondaire (ex: si on est en buteur, on montre aussi les passes en petit)
     String subInfo = "";
-    if (_selectedTab == 0) subInfo = _formatPasses(player.assists);
-    else if (_selectedTab == 1) subInfo = _formatButs(player.goals);
+    if (tabIndex == 0) subInfo = _formatPasses(player.assists);
+    else if (tabIndex == 1) subInfo = _formatButs(player.goals);
     else subInfo = "${_formatButs(player.goals)} / ${_formatPasses(player.assists)}";
 
     return Container(

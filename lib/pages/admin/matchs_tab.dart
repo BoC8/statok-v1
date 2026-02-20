@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../models/joueur_model.dart';
@@ -88,9 +89,9 @@ class _MatchsTabState extends State<MatchsTab> {
     }
   }
 
-  void _ajouterLigneAction() {
+  void _ajouterLigneAction(String type) {
     setState(() {
-      _actionsTemp.add({'joueur_id': null, 'joueur_nom': '', 'type': 'Goal'});
+      _actionsTemp.add({'joueur_id': null, 'joueur_nom': '', 'type': type, 'quantite': 1});
     });
   }
 
@@ -98,7 +99,7 @@ class _MatchsTabState extends State<MatchsTab> {
     if (!_formKey.currentState!.validate()) return;
     if (_butsGjpbCtrl.text.isEmpty || _butsAdvCtrl.text.isEmpty) return;
 
-    if (_actionsTemp.any((a) => a['joueur_id'] == null)) {
+    if (_actionsTemp.any((a) => a['joueur_id'] == null || (a['quantite'] as int? ?? 0) <= 0)) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sélectionnez les joueurs pour les actions'), backgroundColor: Colors.orange));
       return;
     }
@@ -118,12 +119,15 @@ class _MatchsTabState extends State<MatchsTab> {
       final newMatchId = response['id'];
 
       if (_actionsTemp.isNotEmpty) {
-        final List<Map<String, dynamic>> actionsADb = _actionsTemp.map((action) {
-          return {
-            'match_id': newMatchId,
-            'joueur_id': action['joueur_id'],
-            'type': action['type'],
-          };
+        final List<Map<String, dynamic>> actionsADb = _actionsTemp.expand((action) {
+          final quantite = action['quantite'] as int? ?? 1;
+          return List.generate(quantite, (_) {
+            return {
+              'match_id': newMatchId,
+              'joueur_id': action['joueur_id'],
+              'type': action['type'],
+            };
+          });
         }).toList();
         await _client.from('actions').insert(actionsADb);
       }
@@ -241,15 +245,50 @@ class _MatchsTabState extends State<MatchsTab> {
                           const SizedBox(height: 10),
                           Row(
                             children: [
-                              Expanded(child: TextFormField(controller: _butsGjpbCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Buts GJPB', border: OutlineInputBorder()))),
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _butsGjpbCtrl,
+                                  keyboardType: TextInputType.number,
+                                  onTapOutside: (_) => FocusScope.of(context).unfocus(),
+                                  decoration: const InputDecoration(labelText: 'Buts GJPB', border: OutlineInputBorder()),
+                                ),
+                              ),
                               const SizedBox(width: 10),
                               const Text("-", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                               const SizedBox(width: 10),
-                              Expanded(child: TextFormField(controller: _butsAdvCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Buts ADV', border: OutlineInputBorder()))),
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _butsAdvCtrl,
+                                  keyboardType: TextInputType.number,
+                                  onTapOutside: (_) => FocusScope.of(context).unfocus(),
+                                  decoration: const InputDecoration(labelText: 'Buts ADV', border: OutlineInputBorder()),
+                                ),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 20),
-                          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text("Actions", style: TextStyle(fontWeight: FontWeight.bold)), IconButton(onPressed: _ajouterLigneAction, icon: const Icon(Icons.add_circle, color: AppTheme.bleuMarine))]),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text("Actions", style: TextStyle(fontWeight: FontWeight.bold)),
+                              Wrap(
+                                spacing: 8,
+                                children: [
+                                  OutlinedButton.icon(
+                                    onPressed: () => _ajouterLigneAction('Goal'),
+                                    icon: const Icon(Icons.sports_soccer),
+                                    label: const Text('Ajouter buteur'),
+                                  ),
+                                  OutlinedButton.icon(
+                                    onPressed: () => _ajouterLigneAction('Assist'),
+                                    icon: const Icon(Icons.assistant),
+                                    label: const Text('Ajouter passeur'),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
                           ..._actionsTemp.asMap().entries.map((entry) {
                             int index = entry.key;
                             Map<String, dynamic> action = entry.value;
@@ -265,6 +304,21 @@ class _MatchsTabState extends State<MatchsTab> {
                                     return TextField(controller: ctrl, focusNode: focus, decoration: const InputDecoration(labelText: 'Joueur', border: OutlineInputBorder(), isDense: true));
                                   },
                                 )),
+                                const SizedBox(width: 10),
+                                SizedBox(
+                                  width: 70,
+                                  child: TextFormField(
+                                    initialValue: (action['quantite'] ?? 1).toString(),
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                    decoration: const InputDecoration(
+                                      labelText: 'Nb',
+                                      border: OutlineInputBorder(),
+                                      isDense: true,
+                                    ),
+                                    onChanged: (v) => setState(() => action['quantite'] = int.tryParse(v) ?? 0),
+                                  ),
+                                ),
                                 const SizedBox(width: 10),
                                 Expanded(flex: 2, child: DropdownButtonFormField<String>(value: action['type'], decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true), items: const [DropdownMenuItem(value: 'Goal', child: Text('But')), DropdownMenuItem(value: 'Assist', child: Text('Passe'))], onChanged: (v) => setState(() => action['type'] = v))),
                                 IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => setState(() => _actionsTemp.removeAt(index)))
