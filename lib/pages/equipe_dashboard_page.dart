@@ -127,7 +127,14 @@ String _getCurrentStreak() {
       else break;
     }
 
-    // Série sans victoire (active - pour le cas 5)
+    // Série de défaites (active)
+    int defeatStreak = 0;
+    for (var m in _allMatches) {
+      if (m['buts_gjpb'] < m['buts_adv']) defeatStreak++;
+      else break;
+    }
+
+    // Série sans victoire (active)
     int noWinStreak = 0;
     for (var m in _allMatches) {
       if (m['buts_gjpb'] <= m['buts_adv']) noWinStreak++;
@@ -150,36 +157,49 @@ String _getCurrentStreak() {
 
     // --- 2. LOGIQUE EN CASCADE (PRIORITÉS) ---
 
-    // 1) "FEU" : 3 victoires ou plus consécutives
-    if (winStreak >= 3) {
-      return "🔥 $winStreak Victoires consécutives !";
+    // 1) 🔥🛡️ Série de victoires depuis longtemps (>= 7)
+    if (winStreak >= 7) {
+      return "🔥🛡️ $winStreak victoires consécutives !!!";
     }
-    
-    // 2) "BOUCLIER" : 5 matchs ou plus sans défaite
+
+    // 2) 🔥 Série de victoires (>= 3)
+    else if (winStreak >= 3) {
+      return "🔥 $winStreak victoires consécutives !";
+    }
+
+    // 3) 🛡️ Invincibilité (>= 5 matchs sans défaite)
     else if (noDefeatStreak >= 5) {
-      return "🛡️ $noDefeatStreak Matchs sans défaite";
+      return "🛡️ $noDefeatStreak matchs sans défaite";
     }
-    
-    // 3) "FORME 10" : 5 victoires ou plus sur les 10 derniers
-    else if (winsInLast10 > 5) {
-      return "📈 $winsInLast10 Victoires sur les 10 derniers matchs";
+
+    // 4) 📈 Très bonne dynamique (>= 6 victoires sur les 10 derniers)
+    else if (winsInLast10 >= 6) {
+      return "📈 $winsInLast10 victoires sur les 10 derniers matchs";
     }
-    
-    // 4) "FORME 5" : 3 victoires ou plus sur les 5 derniers
+
+    // 5) 💪 Bonne forme récente (>= 3 victoires sur les 5 derniers)
     else if (winsInLast5 >= 3) {
-      return "💪 $winsInLast5 Victoires sur les 5 derniers matchs";
+      return "💪 $winsInLast5 victoires sur les 5 derniers matchs";
     }
-    
-    // 5) SINON : X Matchs sans victoire
+
+    // 6) 🚀 Début de série (Exactement 2 victoires)
+    else if (winStreak == 2) {
+      return "🚀 La série se lance : 2 victoires de suite";
+    }
+
+    // 7) 📉 Mauvaise série (>= 3 défaites consécutives)
+    else if (defeatStreak >= 3) {
+      return "📉 $defeatStreak défaites consécutives";
+    }
+
+    // 8) ☁️ Pas de victoire récente (>= 4 matchs sans victoire)
+    else if (noWinStreak >= 4) {
+      return "☁️ $noWinStreak matchs sans victoire";
+    }
+
+    // 9) ⚖️ Cas neutre (irrégulier)
     else {
-      if (noWinStreak > 0) {
-        String label = noWinStreak > 1 ? "Matchs" : "Match";
-        return "☁️ $noWinStreak $label sans victoire";
-      } else {
-        // Cas rare : On vient de gagner (donc noWinStreak = 0), 
-        // mais on n'a pas atteint les seuils du dessus (ex: 1 victoire isolée ou 2 victoires)
-        return "1 Victoire (Série en cours)";
-      }
+      return "⚖️ Résultats récents irréguliers";
     }
   }
 
