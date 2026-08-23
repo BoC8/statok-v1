@@ -6,7 +6,7 @@ import 'package:table_calendar/table_calendar.dart';
 import '../theme/app_theme.dart';
 import '../widgets/compact_filter_button.dart';
 
-// --- MODÃˆLES DE DONNÃ‰ES ---
+// --- MODÈLES DE DONNÉES ---
 class TabTireur {
   final String nom;
   final bool reussi;
@@ -86,7 +86,7 @@ class _CalendrierPageState extends State<CalendrierPage> {
   List<String> _listeCompet = [];
   List<String> _listeAdversaires = [];
 
-  // Ã‰tat d'expansion des cartes
+  // État d'expansion des cartes
   Set<String> _expandedCards = {};
 
   @override
@@ -101,24 +101,26 @@ class _CalendrierPageState extends State<CalendrierPage> {
       final prefs = await SharedPreferences.getInstance();
       final categorie = prefs.getString('selected_category');
       final saison = prefs.getString('selected_season');
-      final resProgs = await _client
-          .from('programmations')
-          .select('*, adversaires(nom)');
-      final resMatchs = await _client
+      // Filtrage CÔTÉ SERVEUR : seules les lignes de la catégorie et de la
+      // saison affichées sont téléchargées.
+      final dbCategorie = _categoriePourDb(categorie);
+
+      var qProgs = _client.from('programmations').select('*, adversaires(nom)');
+      if (dbCategorie != null) qProgs = qProgs.eq('categorie', dbCategorie);
+      if (saison != null) qProgs = qProgs.eq('saison', saison);
+      final resProgs = await qProgs;
+
+      var qMatchs = _client
           .from('matchs')
           .select('*, adversaires(nom), actions(type, joueurs(nom))');
+      if (dbCategorie != null) qMatchs = qMatchs.eq('categorie', dbCategorie);
+      if (saison != null) qMatchs = qMatchs.eq('saison', saison);
+      final resMatchs = await qMatchs;
 
       List<MatchEvent> allEvents = [];
 
       // Programmations
       for (var p in resProgs) {
-        if (!_categorieMatches(categorie, p['categorie'])) {
-          continue;
-        }
-        if (saison != null && p['saison'] != saison) {
-          continue;
-        }
-
         allEvents.add(
           MatchEvent(
             id: p['id'].toString(),
@@ -135,13 +137,6 @@ class _CalendrierPageState extends State<CalendrierPage> {
 
       // Matchs Joués
       for (var m in resMatchs) {
-        if (!_categorieMatches(categorie, m['categorie'])) {
-          continue;
-        }
-        if (saison != null && m['saison'] != saison) {
-          continue;
-        }
-
         List<String> goals = [];
         List<String> assists = [];
         List<TabTireur> tabTireurs = [];
@@ -261,12 +256,6 @@ class _CalendrierPageState extends State<CalendrierPage> {
         return 'Seniors';
     }
     return categorie;
-  }
-
-  bool _categorieMatches(String? selected, dynamic dbValue) {
-    if (selected == null) return true;
-    final db = dbValue?.toString();
-    return db == selected || db == _categoriePourDb(selected);
   }
 
   String _nomAdversaire(Map<String, dynamic> row) {
@@ -418,7 +407,7 @@ class _CalendrierPageState extends State<CalendrierPage> {
           : CustomScrollView(
               controller: _scrollController,
               slivers: [
-                // --- 1. FILTRES STYLISÃ‰S ---
+                // --- 1. FILTRES STYLISÉS ---
                 SliverToBoxAdapter(
                   child: CompactFilterButton(
                     equipes: _listeEquipes,
@@ -444,7 +433,7 @@ class _CalendrierPageState extends State<CalendrierPage> {
                   ),
                 ),
 
-                // --- 2. BANNIÃˆRE À VENIR ---
+                // --- 2. BANNIÈRE À VENIR ---
                 if (_nextMatches.isNotEmpty) ...[
                   SliverToBoxAdapter(
                     child: Padding(
@@ -589,7 +578,7 @@ class _CalendrierPageState extends State<CalendrierPage> {
                   ),
                 ),
 
-                // --- 4. LISTE DÃ‰TAILS ---
+                // --- 4. LISTE DÉTAILS ---
                 if (_selectedDay != null)
                   SliverToBoxAdapter(
                     child: Padding(

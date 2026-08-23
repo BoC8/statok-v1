@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../widgets/compact_filter_button.dart';
 
-// ModÃ¨le pour les stats d'un joueur
+// Modèle pour les stats d'un joueur
 class PlayerStats {
   final String name;
   final int goals;
@@ -30,7 +30,7 @@ class _StatsPageState extends State<StatsPage> {
   final SupabaseClient _client = Supabase.instance.client;
   final PageController _pageController = PageController(initialPage: 0);
 
-  // --- VARIABLES D'Ã‰TAT ---
+  // --- VARIABLES D'ÉTAT ---
   bool _isLoading = true;
   List<PlayerStats> _allStats = []; // Stats brutes
 
@@ -61,16 +61,25 @@ class _StatsPageState extends State<StatsPage> {
       final prefs = await SharedPreferences.getInstance();
       final categorie = prefs.getString('selected_category');
       final saison = prefs.getString('selected_season');
-      // 1. RÃ©cupÃ©rer tous les joueurs
+      // 1. Récupérer tous les joueurs
       final resJoueurs = await _client.from('joueurs').select();
 
-      // 2. RÃ©cupÃ©rer toutes les actions avec les infos du match liÃ©
-      // On utilise la syntaxe matchs!inner pour Ãªtre sÃ»r d'avoir le match
-      final resActions = await _client
+      // 2. Récupérer les actions avec les infos du match lié.
+      // Filtrage CÔTÉ SERVEUR via la table liée. Le "!inner" rend la jointure
+      // obligatoire, ce qui autorise à filtrer sur les colonnes de matchs.
+      final dbCategorie = _categoriePourDb(categorie);
+
+      var qActions = _client
           .from('actions')
           .select(
-            'type, joueur_id, matchs(equipe, competition, lieu, categorie, saison)',
+            'type, joueur_id, matchs!inner(equipe, competition, lieu, categorie, saison)',
           );
+      if (dbCategorie != null) {
+        qActions = qActions.eq('matchs.categorie', dbCategorie);
+      }
+      if (saison != null) qActions = qActions.eq('matchs.saison', saison);
+
+      final resActions = await qActions;
 
       Map<String, Map<String, dynamic>> statsMap = {};
 
@@ -89,8 +98,6 @@ class _StatsPageState extends State<StatsPage> {
       for (var action in resActions) {
         final match = action['matchs'];
         if (match == null) continue;
-        if (!_categorieMatches(categorie, match['categorie'])) continue;
-        if (saison != null && match['saison'] != saison) continue;
 
         final equipe = match['equipe']?.toString() ?? '';
         final competition = match['competition']?.toString() ?? '';
@@ -214,12 +221,6 @@ class _StatsPageState extends State<StatsPage> {
     return categorie;
   }
 
-  bool _categorieMatches(String? selected, dynamic dbValue) {
-    if (selected == null) return true;
-    final db = dbValue?.toString();
-    return db == selected || db == _categoriePourDb(selected);
-  }
-
   String _lieuCode(dynamic lieu) {
     final value = lieu?.toString().trim().toUpperCase() ?? '';
     if (value.startsWith('DOM')) return 'DOM';
@@ -258,7 +259,7 @@ class _StatsPageState extends State<StatsPage> {
             },
           ),
 
-          // 2. BOUTONS DE SÃ‰LECTION (Tabs)
+          // 2. BOUTONS DE SÉLECTION (Tabs)
           Container(
             margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             padding: const EdgeInsets.all(4),
@@ -378,7 +379,7 @@ class _StatsPageState extends State<StatsPage> {
   }
 
   Widget _buildPodium(List<PlayerStats> stats, int tabIndex) {
-    // RÃ©cupÃ©ration sÃ©curisÃ©e des 3 premiers
+    // Récupération sécurisée des 3 premiers
     PlayerStats? first = stats.isNotEmpty ? stats[0] : null;
     PlayerStats? second = stats.length > 1 ? stats[1] : null;
     PlayerStats? third = stats.length > 2 ? stats[2] : null;

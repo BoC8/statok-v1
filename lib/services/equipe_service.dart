@@ -114,16 +114,23 @@ class EquipeService {
     String? saison,
   ) async {
     try {
-      final matchs = await _client
-          .from('matchs')
-          .select('equipe, categorie, saison');
-      final programmations = await _client
+      // Filtrage CÔTÉ SERVEUR plutôt que parcours de toute la table.
+      final dbCategorie = categoriePourDb(categorie);
+
+      var qMatchs = _client.from('matchs').select('equipe, categorie, saison');
+      if (dbCategorie != null) qMatchs = qMatchs.eq('categorie', dbCategorie);
+      if (saison != null) qMatchs = qMatchs.eq('saison', saison);
+
+      var qProgs = _client
           .from('programmations')
           .select('equipe, categorie, saison');
+      if (dbCategorie != null) qProgs = qProgs.eq('categorie', dbCategorie);
+      if (saison != null) qProgs = qProgs.eq('saison', saison);
+
+      final matchs = await qMatchs;
+      final programmations = await qProgs;
 
       for (final row in [...matchs, ...programmations]) {
-        if (!categorieMatches(categorie, row['categorie'])) continue;
-        if (saison != null && row['saison'] != saison) continue;
         final equipe = row['equipe']?.toString() ?? '';
         if (equipe.isNotEmpty) equipes.add(equipe);
       }

@@ -39,28 +39,28 @@ class _EquipeDashboardPageState extends State<EquipeDashboardPage> {
       final categorie = prefs.getString('selected_category');
       final saison = prefs.getString('selected_season');
 
-      final resMatches = await _client
+      // Filtrage CÔTÉ SERVEUR : catégorie et saison en plus de l'équipe.
+      final dbCategorie = _categoriePourDb(categorie);
+
+      var qMatches = _client
           .from('matchs')
           .select('*, adversaires(nom), actions(type, joueurs(nom))')
-          .eq('equipe', widget.equipeName)
-          .order('date', ascending: false);
+          .eq('equipe', widget.equipeName);
+      if (dbCategorie != null) qMatches = qMatches.eq('categorie', dbCategorie);
+      if (saison != null) qMatches = qMatches.eq('saison', saison);
+      final resMatches = await qMatches.order('date', ascending: false);
 
-      final resProg = await _client
+      var qProg = _client
           .from('programmations')
           .select('*, adversaires(nom)')
           .eq('equipe', widget.equipeName)
-          .gte('date', DateTime.now().toIso8601String())
-          .order('date', ascending: true)
-          .limit(10);
+          .gte('date', DateTime.now().toIso8601String());
+      if (dbCategorie != null) qProg = qProg.eq('categorie', dbCategorie);
+      if (saison != null) qProg = qProg.eq('saison', saison);
+      final resProg = await qProg.order('date', ascending: true).limit(10);
 
-      final filteredMatches = List<Map<String, dynamic>>.from(resMatches)
-          .where((m) => _categorieMatches(categorie, m['categorie']))
-          .where((m) => saison == null || m['saison'] == saison)
-          .toList();
-      final filteredProgs = List<Map<String, dynamic>>.from(resProg)
-          .where((p) => _categorieMatches(categorie, p['categorie']))
-          .where((p) => saison == null || p['saison'] == saison)
-          .toList();
+      final filteredMatches = List<Map<String, dynamic>>.from(resMatches);
+      final filteredProgs = List<Map<String, dynamic>>.from(resProg);
 
       if (mounted) {
         setState(() {
@@ -194,12 +194,6 @@ class _EquipeDashboardPageState extends State<EquipeDashboardPage> {
         return 'Seniors';
     }
     return categorie;
-  }
-
-  bool _categorieMatches(String? selected, dynamic dbValue) {
-    if (selected == null) return true;
-    final db = dbValue?.toString();
-    return db == selected || db == _categoriePourDb(selected);
   }
 
   Map<String, int> _getGlobalStats(List<Map<String, dynamic>> matches) {

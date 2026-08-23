@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
 import '../widgets/compact_filter_button.dart';
 
-// ModÃ¨le spÃ©cifique pour les RÃ©sultats
+// Modèle spécifique pour les Résultats
 class TabTireur {
   final String nom;
   final bool reussi;
@@ -57,7 +57,7 @@ class ResultatsPage extends StatefulWidget {
 class _ResultatsPageState extends State<ResultatsPage> {
   final SupabaseClient _client = Supabase.instance.client;
 
-  // DonnÃ©es
+  // Données
   List<MatchResult> _allMatches = [];
   List<MatchResult> _filteredMatches = [];
   bool _isLoading = true;
@@ -71,7 +71,7 @@ class _ResultatsPageState extends State<ResultatsPage> {
   List<String> _listeCompet = [];
   List<String> _listeAdversaires = [];
 
-  // Ã‰tat d'expansion des cartes
+  // État d'expansion des cartes
   Set<String> _expandedCards = {};
 
   @override
@@ -83,27 +83,25 @@ class _ResultatsPageState extends State<ResultatsPage> {
   Future<void> _chargerResultats() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      // CORRECTION : On prend directement la valeur exacte, sans la transformer
       final categorie = prefs.getString('selected_category');
       final saison = prefs.getString('selected_season');
 
-      // On rÃ©cupÃ¨re les matchs jouÃ©s avec leurs actions et le nom de l'adversaire
-      final response = await _client
+      // Filtrage CÔTÉ SERVEUR : on ne télécharge que les matchs de la
+      // catégorie et de la saison affichées, au lieu de rapatrier toute la
+      // table pour en jeter la majorité en Dart.
+      final dbCategorie = _categoriePourDb(categorie);
+
+      var query = _client
           .from('matchs')
-          .select('*, adversaires(nom), actions(type, joueurs(nom))')
-          .order('date', ascending: false);
+          .select('*, adversaires(nom), actions(type, joueurs(nom))');
+      if (dbCategorie != null) query = query.eq('categorie', dbCategorie);
+      if (saison != null) query = query.eq('saison', saison);
+
+      final response = await query.order('date', ascending: false);
 
       List<MatchResult> loaded = [];
 
       for (var m in response) {
-        // Filtrage dynamique selon la catÃ©gorie choisie Ã  l'accueil
-        if (!_categorieMatches(categorie, m['categorie'])) {
-          continue;
-        }
-        if (saison != null && m['saison'] != saison) {
-          continue;
-        }
-
         List<String> goals = [];
         List<String> assists = [];
         List<TabTireur> tabTireurs = [];
@@ -204,12 +202,6 @@ class _ResultatsPageState extends State<ResultatsPage> {
         return 'Seniors';
     }
     return categorie;
-  }
-
-  bool _categorieMatches(String? selected, dynamic dbValue) {
-    if (selected == null) return true;
-    final db = dbValue?.toString();
-    return db == selected || db == _categoriePourDb(selected);
   }
 
   List<String> _valeursUniques(Iterable<String> values) {

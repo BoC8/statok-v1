@@ -241,9 +241,10 @@ conventions respectées par le code Dart uniquement.
 
 ---
 
-## 6. Comment les données sont chargées (point critique)
+## 6. Comment les données sont chargées
 
-Le schéma est le même dans **toutes** les pages de données :
+Depuis le 23 août 2026, **le filtrage se fait côté serveur** (voir §8). Le schéma est le
+même dans toutes les pages de données :
 
 ```dart
 // 1. lire le contexte
@@ -251,25 +252,41 @@ final prefs = await SharedPreferences.getInstance();
 final categorie = prefs.getString('selected_category');
 final saison    = prefs.getString('selected_season');
 
-// 2. TOUT télécharger, sans filtre serveur
-final res = await _client.from('matchs')
-    .select('*, adversaires(nom), actions(type, joueurs(nom))');
+// 2. ne télécharger que ce qui sera affiché
+final dbCategorie = _categoriePourDb(categorie);   // 'U16 - U17 - U18' -> 'U16-17-18'
 
-// 3. filtrer en Dart, ligne par ligne
-for (var m in res) {
-  if (!_categorieMatches(categorie, m['categorie'])) continue;
-  if (saison != null && m['saison'] != saison) continue;
-  ...
-}
+var query = _client.from('matchs')
+    .select('*, adversaires(nom), actions(type, joueurs(nom))');
+if (dbCategorie != null) query = query.eq('categorie', dbCategorie);
+if (saison != null)      query = query.eq('saison', saison);
+
+final res = await query.order('date', ascending: false);
+
+// 3. plus de filtrage catégorie/saison en Dart — il n'a plus lieu d'être
 ```
 
-**Conséquence** : ouvrir le calendrier télécharge tous les matchs de toutes les
-catégories et de toutes les saisons, puis en jette 90 %. Ça tient aujourd'hui parce que
-la base est petite ; ça se dégradera saison après saison. C'est aussi le premier
-chantier d'optimisation (voir §8).
+Les filtres d'interface (équipe, compétition, lieu) restent en Dart : ils changent à
+chaque clic, les refaire côté serveur provoquerait un aller-retour réseau par clic.
 
-Aucun cache, aucun state partagé : chaque page recharge depuis zéro dans son
-`initState()`. Naviguer Accueil → Résultats → retour → Résultats = 2 chargements complets.
+**Cas particulier de `stats_page`** : on ne filtre pas `actions` directement mais *à
+travers sa jointure*. Le `!inner` rend la jointure obligatoire, ce qui autorise PostgREST
+à filtrer sur les colonnes de la table liée :
+
+```dart
+.select('type, joueur_id, matchs!inner(equipe, competition, lieu, categorie, saison)')
+.eq('matchs.categorie', dbCategorie)
+.eq('matchs.saison', saison)
+```
+
+**Ce qui reste à améliorer** : aucun cache, aucun state partagé. Chaque page recharge
+depuis zéro dans son `initState()`. Naviguer Accueil → Résultats → retour → Résultats
+déclenche deux chargements complets. C'est ce que résoudraient les `providers/` Riverpod
+restés vides (§8).
+
+**Exception** : les onglets admin (`matchs_tab`, `programmations_tab`) utilisent un
+`StreamBuilder` sur un flux temps réel Supabase, pas un `FutureBuilder`. La liste se met
+à jour toute seule après un ajout ou une suppression. Le filtrage y est encore fait en
+Dart sur le flux — à revoir si ces tables grossissent beaucoup.
 
 ---
 
@@ -281,7 +298,7 @@ corriger un bug à un seul endroit :
 | Fonction / classe | Copies dans |
 |---|---|
 | `_categoriePourDb()` | equipe_service, matchs_tab, programmations_tab, joueurs_tab, equipes_admin_tab, calendrier, resultats, stats, equipe_dashboard — **9 copies** |
-| `_categorieMatches()` | equipe_service, matchs_tab, programmations_tab, calendrier, resultats, stats, equipe_dashboard |
+| `_categorieMatches()` | equipe_service, matchs_tab, programmations_tab — **3 copies** (4 supprimées le 23/08/2026, devenues inutiles avec le filtrage serveur) |
 | `_nomAdversaire()` | matchs_tab ×2, programmations_tab ×2, calendrier, resultats, equipe_dashboard |
 | `_lieuCode()` | calendrier, resultats, stats, equipe_dashboard |
 | `_getColorForCompet()` | calendrier, resultats, stats, equipe_dashboard |
@@ -429,8 +446,11 @@ Vérifié aussi : aucune clé `service_role` n'a jamais été commitée dans les
 
 ### 🟡 Performance et structure
 
-1. **Filtrer côté serveur.** Ajouter `.eq('saison', saison).eq('categorie', cat)` aux
-   requêtes. Gain immédiat, changement local, faible risque.
+1. ~~**Filtrer côté serveur.**~~ ✅ **Fait le 23 août 2026.** Les 5 fichiers de
+   chargement filtrent sur `categorie` + `saison` côté Postgres. Prérequis : la base a
+   d'abord été normalisée (`docs/normalisation_categories.sql`) — 72 matchs étaient
+   stockés sous la forme d'affichage `U16 - U17 - U18`, filtrer sans les convertir les
+   aurait fait disparaître de l'app. Voir §6 pour le détail des requêtes.
 2. **Remplir les `repositories/`.** Un `MatchRepository`, `JoueurRepository`,
    `StatsRepository` qui portent les requêtes — les pages ne parlent plus à Supabase.
 3. **Remplir les `providers/`.** Riverpod est déjà installé et `ProviderScope` posé :
@@ -461,6 +481,17 @@ Vérifié aussi : aucune clé `service_role` n'a jamais été commitée dans les
    migration (`supabase db dump --schema-only > docs/schema.sql`).
 4. **Commiter avant toute modification assistée**, pour pouvoir revenir en arrière.
 5. **Mettre ce fichier à jour** après chaque changement structurel.
+
+### Scripts SQL du projet (`docs/`)
+
+| Fichier | Rôle | Rejouable |
+|---|---|---|
+| `schema.sql` | Schéma de référence de la base | — (documentation) |
+| `rls_policies.sql` | Active la RLS + policies sur toutes les tables | ✅ |
+| `migration_cascade_actions.sql` | `ON DELETE CASCADE` sur `actions.match_id` | ✅ |
+| `normalisation_categories.sql` | Unifie l'écriture des catégories | ✅ |
+| `index.sql` | Index accompagnant le filtrage serveur | ✅ |
+| `certificat-ios-sans-mac.md` | Procédure de signature iOS depuis Windows | — |
 
 ### Où aller selon le sujet
 
