@@ -191,8 +191,8 @@ class _ProgrammationsTabState extends State<ProgrammationsTab> {
     }
   }
 
-  void _ouvrirDetails(Map<String, dynamic> prog) {
-    showDialog(
+  Future<void> _ouvrirDetails(Map<String, dynamic> prog) async {
+    await showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) {
@@ -208,6 +208,12 @@ class _ProgrammationsTabState extends State<ProgrammationsTab> {
         );
       },
     );
+
+    // Le flux temps réel de Supabase ne transmet pas les UPDATE lorsque la RLS
+    // est active (bug Supabase ouvert depuis avril 2025). On ne s'y fie donc
+    // plus : incrémenter _refreshTick recrée le StreamBuilder, qui refait une
+    // lecture initiale — celle-ci, elle, est toujours à jour.
+    if (mounted) setState(() => _refreshTick++);
   }
 
   void _ouvrirFiltres() {

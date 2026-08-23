@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../providers/app_providers.dart';
 import 'package:statok/pages/admin/matchs_tab.dart';
 import '../../theme/app_theme.dart';
 import 'equipes_admin_tab.dart';
 import 'joueurs_tab.dart';
 import 'programmations_tab.dart';
 
-class AdminDashboard extends StatefulWidget {
+class AdminDashboard extends ConsumerStatefulWidget {
   const AdminDashboard({super.key});
 
   @override
-  State<AdminDashboard> createState() => _AdminDashboardState();
+  ConsumerState<AdminDashboard> createState() => _AdminDashboardState();
 }
 
-class _AdminDashboardState extends State<AdminDashboard> {
+class _AdminDashboardState extends ConsumerState<AdminDashboard> {
   int _selectedIndex = 0;
   String _categorieActuelle = 'Catégorie';
   String? _selectedSeason;
@@ -28,7 +30,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   Future<void> _chargerContexte() async {
     final prefs = await SharedPreferences.getInstance();
-    final seasons = _buildAvailableSeasons();
+    final seasons = saisonsDisponibles();
     final savedSeason = prefs.getString('selected_season');
     final selectedSeason = seasons.contains(savedSeason)
         ? savedSeason!
@@ -44,23 +46,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
     });
   }
 
-  List<String> _buildAvailableSeasons() {
-    const int firstSeasonStart = 2025;
-    final now = DateTime.now();
-    final currentSeasonStart = now.isBefore(DateTime(now.year, 5, 28))
-        ? now.year - 1
-        : now.year;
-
-    return [
-      for (int year = currentSeasonStart; year >= firstSeasonStart; year--)
-        '$year-${year + 1}',
-    ];
-  }
-
   Future<void> _onSeasonChanged(String? saison) async {
     if (saison == null) return;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('selected_season', saison);
+    await majContexte(ref, saison: saison);
     if (mounted) setState(() => _selectedSeason = saison);
   }
 

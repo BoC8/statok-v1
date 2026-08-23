@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/app_providers.dart';
 import '../theme/app_theme.dart';
 // N'oublie pas d'importer ta page d'accueil
 import 'home_page.dart';
 
-class CategorySelectionPage extends StatelessWidget {
+class CategorySelectionPage extends ConsumerWidget {
   const CategorySelectionPage({super.key});
 
   final List<String> _categories = const [
@@ -16,11 +17,12 @@ class CategorySelectionPage extends StatelessWidget {
   // Fonction asynchrone gérée lors du clic
   Future<void> _onCategorySelected(
     BuildContext context,
+    WidgetRef ref,
     String category,
   ) async {
-    // 1. On sauvegarde le choix dans la mémoire du téléphone
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('selected_category', category);
+    // On enregistre le choix ET on invalide le contexte, ce qui recharge en
+    // cascade toutes les données qui en dépendent.
+    await majContexte(ref, categorie: category);
 
     // Sécurité recommandée par Flutter quand on utilise des contextes après un 'await'
     if (!context.mounted) return;
@@ -34,7 +36,7 @@ class CategorySelectionPage extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -116,7 +118,12 @@ class CategorySelectionPage extends StatelessWidget {
                     separatorBuilder: (ctx, i) => SizedBox(height: cardSpacing),
                     itemBuilder: (context, index) {
                       final categorie = _categories[index];
-                      return _buildCategoryCard(context, categorie, cardHeight);
+                      return _buildCategoryCard(
+                        context,
+                        ref,
+                        categorie,
+                        cardHeight,
+                      );
                     },
                   ),
                 ),
@@ -146,6 +153,7 @@ class CategorySelectionPage extends StatelessWidget {
   // Le widget de la carte (identique à ta page des équipes)
   Widget _buildCategoryCard(
     BuildContext context,
+    WidgetRef ref,
     String categorie,
     double height,
   ) {
@@ -153,7 +161,7 @@ class CategorySelectionPage extends StatelessWidget {
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
-        onTap: () => _onCategorySelected(context, categorie),
+        onTap: () => _onCategorySelected(context, ref, categorie),
         borderRadius: BorderRadius.circular(12),
         child: Container(
           height: height,

@@ -20,7 +20,7 @@
 | **Nom** | statok (affiché « STATOK » / « FCPB ») |
 | **Stack** | Flutter · Dart SDK ^3.10.4 · Supabase (Postgres + Auth) |
 | **Cibles** | iOS, Android (dossiers `web/`, `windows/`, `linux/`, `macos/` présents mais non exploités) |
-| **Volume** | ~10 360 lignes de Dart réparties sur 24 fichiers non vides |
+| **Volume** | ~10 500 lignes de Dart réparties sur 26 fichiers non vides |
 | **Langue** | Interface entièrement en français, locale forcée `fr_FR` |
 | **CI** | `.github/workflows/ios_build.yml` |
 
@@ -41,6 +41,9 @@
 
 ## 2. Arborescence de `lib/`
 
+> Structure au 23 août 2026, après le grand nettoyage. Les fichiers marqués
+> **[nouveau]** ou **[extrait]** datent de cette journée.
+
 ```
 lib/
 ├── main.dart ......................... 47 l.  Init Supabase + intl, lance MyApp
@@ -49,16 +52,23 @@ lib/
 ├── theme/
 │   └── app_theme.dart ................ 36 l.  Couleurs club + ThemeData
 │
-├── models/
-│   ├── joueur_model.dart ............. 34 l.  ✅ seul modèle réellement utilisé
-│   ├── match_model.dart .............. VIDE
-│   └── action_model.dart ............. VIDE
+├── utils/
+│   └── categorie_utils.dart ......... 133 l.  [nouveau] TOUTE la logique catégorie
+│                                              (remplace 16 méthodes dupliquées)
+│
+├── repositories/  ..................... l'accès aux données, plus aucune requête
+│   ├── match_repository.dart ........ 107 l.  [nouveau] matchs + programmations
+│   └── stats_repository.dart ........  51 l.  [nouveau] joueurs + actions
 │
 ├── services/
-│   └── equipe_service.dart ........... 154 l. Chargement/CRUD des équipes + mapping catégorie
+│   └── equipe_service.dart .......... 152 l.  Chargement/CRUD des équipes
 │
-├── repositories/  ..................... 2 fichiers VIDES
-├── providers/ ......................... 2 fichiers VIDES
+├── models/
+│   ├── joueur_model.dart ............. 34 l.  ✅ seul modèle réellement utilisé
+│   ├── match_model.dart .............. VIDE   ← prochain chantier
+│   └── action_model.dart ............. VIDE   ← prochain chantier
+│
+├── providers/ ......................... 2 fichiers VIDES ← prochain chantier
 ├── utils/date_utils.dart .............. VIDE
 │
 ├── widgets/
@@ -70,21 +80,27 @@ lib/
 └── pages/
     ├── category_selection_page.dart .. 190 l. 🚪 ÉCRAN D'ENTRÉE
     ├── home_page.dart ................ 297 l. Menu principal + sélecteur de saison
-    ├── calendrier_page.dart .......... 1231 l.
-    ├── resultats_page.dart ...........  936 l.
-    ├── stats_page.dart ...............  622 l.
+    ├── calendrier_page.dart .......... 1200 l.
+    ├── resultats_page.dart ...........  907 l.
+    ├── stats_page.dart ...............  596 l.
     ├── equipes_selection_page.dart ...  123 l.
-    ├── equipe_dashboard_page.dart .... 1390 l.
+    ├── equipe_dashboard_page.dart .... 1362 l.
     ├── login_page.dart ...............  134 l. Accès coach
     ├── club_page.dart / team_page.dart / videos_page.dart .. 12-19 l. → COQUILLES VIDES
     │
     └── admin/
         ├── admin_dashboard.dart ......  227 l. 4 onglets
-        ├── matchs_tab.dart ........... 2227 l. ⚠️ le plus gros fichier
-        ├── programmations_tab.dart ... 1017 l.
-        ├── joueurs_tab.dart ..........  691 l.
-        └── equipes_admin_tab.dart ....  425 l.
+        ├── matchs_tab.dart ........... 1108 l. Saisie d'un match + liste
+        ├── match_detail_dialog.dart ..  869 l. [extrait] Consulter/modifier un match
+        ├── tab_session_page.dart .....  312 l. [extrait] Séance de tirs au but
+        ├── programmations_tab.dart ... 1007 l.
+        ├── joueurs_tab.dart ..........  650 l.
+        └── equipes_admin_tab.dart ....  394 l.
 ```
+
+**Les quatre pages publiques n'importent plus Supabase.** Elles passent par les
+`repositories/`. C'est le meilleur test de la séparation : si une page a besoin
+d'`import 'package:supabase_flutter/...'`, c'est qu'une requête a fui hors du repository.
 
 ---
 
@@ -147,8 +163,12 @@ bascule le **28 mai** (`_buildAvailableSeasons()`, dupliqué dans `home_page.dar
 | `U16 - U17 - U18` | `U16-17-18` |
 | `SENIORS` | `Seniors` |
 
-Ce mapping vit dans `EquipeService.categoriePourDb()` — **mais il est recopié à
-l'identique dans 8 autres fichiers** sous le nom `_categoriePourDb()`.
+Ce mapping vit désormais dans **`lib/utils/categorie_utils.dart`**, en un seul
+exemplaire. Il était auparavant recopié dans 9 fichiers, avec des divergences
+silencieuses. `EquipeService.categoriePourDb()` subsiste comme simple délégation, pour
+ne pas casser ses appelants.
+
+**Toute nouvelle catégorie se déclare dans ce fichier, et nulle part ailleurs.**
 
 ---
 
@@ -283,10 +303,36 @@ depuis zéro dans son `initState()`. Naviguer Accueil → Résultats → retour 
 déclenche deux chargements complets. C'est ce que résoudraient les `providers/` Riverpod
 restés vides (§8).
 
-**Exception** : les onglets admin (`matchs_tab`, `programmations_tab`) utilisent un
-`StreamBuilder` sur un flux temps réel Supabase, pas un `FutureBuilder`. La liste se met
-à jour toute seule après un ajout ou une suppression. Le filtrage y est encore fait en
-Dart sur le flux — à revoir si ces tables grossissent beaucoup.
+### ⚠️ Le temps réel des onglets admin — piège connu
+
+`matchs_tab` et `programmations_tab` affichent leur liste via un `StreamBuilder` branché
+sur un flux temps réel Supabase, et non un `FutureBuilder`.
+
+**Depuis l'activation de la RLS, ce flux ne transmet plus les événements UPDATE.** La
+lecture initiale fonctionne, les ajouts et suppressions passent, mais une modification
+n'arrive jamais au client. C'est un bug Supabase ouvert depuis avril 2025
+([discussion #35196](https://github.com/orgs/supabase/discussions/35196)), toujours sans
+correctif, y compris avec une policy `SELECT using (true)`.
+
+**Symptôme vécu le 23/08/2026** : modifier l'adversaire, le score, le lieu ou la
+compétition d'un match semblait sans effet, alors que les buteurs et passeurs, eux, se
+mettaient bien à jour. L'explication tenait à la source de chaque donnée : les champs du
+match venaient du flux (périmé), les actions d'une requête fraîche relancée à chaque
+ouverture du dialogue.
+
+**Parade retenue** : ne plus dépendre du temps réel pour la justesse de l'affichage.
+`_ouvrirDetailsMatch` et `_ouvrirDetails` sont désormais `async`, attendent la fermeture
+du dialogue, puis incrémentent `_refreshTick` — ce qui recrée le `StreamBuilder` et
+force une lecture neuve.
+
+> **À retenir pour la suite** : sur cette base, le temps réel est un confort, jamais une
+> garantie. Tout écran qui doit afficher une donnée à jour après modification doit
+> recharger explicitement.
+
+`docs/realtime_replica_identity.sql` tente de restaurer le comportement natif
+(`replica identity full`), sans garantie — le bug amont est côté Supabase.
+
+Le filtrage de ces flux est encore fait en Dart — à revoir si ces tables grossissent.
 
 ---
 
@@ -295,10 +341,27 @@ Dart sur le flux — à revoir si ces tables grossissent beaucoup.
 Le même bloc de code existe à l'identique dans plusieurs fichiers. Le savoir évite de
 corriger un bug à un seul endroit :
 
+### ✅ Traité le 23 août 2026
+
+Toute la famille « catégorie » — `_categoriePourDb`, `_categorieMatches`,
+`_detailsPourCategorie`, `_categoriePourDetail`, `_detailSuivant`, `_normaliserGenre` —
+soit **16 méthodes réparties dans 9 fichiers**, vit désormais dans
+`lib/utils/categorie_utils.dart`.
+
+Les copies **n'étaient pas identiques**. Trois divergences relevées avant fusion :
+
+| Méthode | Divergence | Traitement |
+|---|---|---|
+| `categoriePourDb` | 6 fichiers géraient `'Seniors'`, 2 non | Version unifiée, idempotente |
+| `detailsPourCategorie` | repli **opposé** : tous les détails vs ensemble vide | **Deux noms distincts**, la différence est désormais nommée |
+| `categoriePourDetail` | `null` vs `'Seniors'` pour un détail inconnu | Version nullable ; le `?? 'Seniors'` reste explicite chez son appelant |
+
+C'est la raison d'être de ce chantier : ces écarts n'étaient pas des bugs *encore*.
+
+### Restant à traiter
+
 | Fonction / classe | Copies dans |
 |---|---|
-| `_categoriePourDb()` | equipe_service, matchs_tab, programmations_tab, joueurs_tab, equipes_admin_tab, calendrier, resultats, stats, equipe_dashboard — **9 copies** |
-| `_categorieMatches()` | equipe_service, matchs_tab, programmations_tab — **3 copies** (4 supprimées le 23/08/2026, devenues inutiles avec le filtrage serveur) |
 | `_nomAdversaire()` | matchs_tab ×2, programmations_tab ×2, calendrier, resultats, equipe_dashboard |
 | `_lieuCode()` | calendrier, resultats, stats, equipe_dashboard |
 | `_getColorForCompet()` | calendrier, resultats, stats, equipe_dashboard |
@@ -306,7 +369,11 @@ corriger un bug à un seul endroit :
 | `_buildResultBadge()` / `_buildTabTireursSection()` | calendrier, resultats |
 | `_buildSeasonSelector()` / `_buildAvailableSeasons()` | home_page, admin_dashboard |
 | **classe `TabTireur`** | déclarée **deux fois**, dans `calendrier_page.dart` **et** `resultats_page.dart` |
-| `_ensureAdversaire()` | matchs_tab ×2, programmations_tab ×2 |
+| `_ensureAdversaire()` | matchs_tab, match_detail_dialog, programmations_tab ×2 |
+
+Le patron est toujours le même : ce sont des fonctions de **présentation** (formater un
+nom, choisir une couleur, dédoublonner une liste). Elles mériteraient un
+`lib/utils/affichage_utils.dart` sur le modèle de `categorie_utils.dart`.
 
 ---
 
@@ -451,14 +518,20 @@ Vérifié aussi : aucune clé `service_role` n'a jamais été commitée dans les
    d'abord été normalisée (`docs/normalisation_categories.sql`) — 72 matchs étaient
    stockés sous la forme d'affichage `U16 - U17 - U18`, filtrer sans les convertir les
    aurait fait disparaître de l'app. Voir §6 pour le détail des requêtes.
-2. **Remplir les `repositories/`.** Un `MatchRepository`, `JoueurRepository`,
-   `StatsRepository` qui portent les requêtes — les pages ne parlent plus à Supabase.
-3. **Remplir les `providers/`.** Riverpod est déjà installé et `ProviderScope` posé :
+2. ~~**Remplir les `repositories/`.**~~ ✅ **Fait le 23 août 2026.** `MatchRepository`
+   et `StatsRepository` portent les requêtes des pages publiques ; ces quatre pages
+   n'importent plus Supabase du tout. Les onglets admin gardent leurs requêtes en
+   propre — ils écrivent autant qu'ils lisent, c'est un chantier distinct.
+3. **Remplir les `providers/`. ← LE CHANTIER SUIVANT.** Riverpod est déjà installé et
+   `ProviderScope` posé :
    un `FutureProvider` par jeu de données supprime les rechargements en boucle et
    partage le contexte catégorie/saison au lieu de relire `SharedPreferences` partout.
-4. **Créer `lib/utils/`** pour les fonctions dupliquées du §7 (une seule copie).
-5. **Découper `matchs_tab.dart`** (2 227 l.) : `MatchDetailDialog` et `_TabSessionPage`
-   sont déjà des classes séparées → un fichier chacune, quasi sans risque.
+4. ~~**Créer `lib/utils/`**~~ ✅ **Fait le 23 août 2026** — `categorie_utils.dart`,
+   16 méthodes dédupliquées. Reste la famille « présentation » (voir §7).
+5. ~~**Découper `matchs_tab.dart`**~~ ✅ **Fait le 23 août 2026** : 2 228 lignes devenues
+   1 108 (`matchs_tab`) + 869 (`match_detail_dialog`) + 312 (`tab_session_page`).
+   `_TabSessionResult` et `_TabSessionPage` sont devenus publics — ils franchissaient
+   désormais une frontière de fichier. Tout le reste demeure privé.
 6. **Modèles manquants** : `MatchModel`, `ActionModel` restent vides, tout circule en
    `Map<String, dynamic>` — aucune vérification du compilateur sur les noms de colonnes.
 
@@ -491,6 +564,7 @@ Vérifié aussi : aucune clé `service_role` n'a jamais été commitée dans les
 | `migration_cascade_actions.sql` | `ON DELETE CASCADE` sur `actions.match_id` | ✅ |
 | `normalisation_categories.sql` | Unifie l'écriture des catégories | ✅ |
 | `index.sql` | Index accompagnant le filtrage serveur | ✅ |
+| `realtime_replica_identity.sql` | Tentative de restaurer le temps réel sous RLS | ✅ |
 | `certificat-ios-sans-mac.md` | Procédure de signature iOS depuis Windows | — |
 
 ### Où aller selon le sujet

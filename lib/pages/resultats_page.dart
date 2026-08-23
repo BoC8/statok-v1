@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
 import '../widgets/compact_filter_button.dart';
-import '../repositories/match_repository.dart';
+import '../providers/match_provider.dart';
 
 // Modèle spécifique pour les Résultats
 class TabTireur {
@@ -47,20 +47,18 @@ class MatchResult {
   bool get hasTab => tabFcpb != null && tabAdv != null;
 }
 
-class ResultatsPage extends StatefulWidget {
+class ResultatsPage extends ConsumerStatefulWidget {
   const ResultatsPage({super.key});
 
   @override
-  State<ResultatsPage> createState() => _ResultatsPageState();
+  ConsumerState<ResultatsPage> createState() => _ResultatsPageState();
 }
 
-class _ResultatsPageState extends State<ResultatsPage> {
-  final MatchRepository _matchRepo = MatchRepository();
-
-  // Données
+class _ResultatsPageState extends ConsumerState<ResultatsPage> {
+  // Données : remplies à chaque build à partir du provider, pas d'un
+  // chargement local. Voir _preparer().
   List<MatchResult> _allMatches = [];
   List<MatchResult> _filteredMatches = [];
-  bool _isLoading = true;
 
   // Filtres
   Set<String> _filtresEquipes = {};
@@ -74,79 +72,63 @@ class _ResultatsPageState extends State<ResultatsPage> {
   // État d'expansion des cartes
   Set<String> _expandedCards = {};
 
-  @override
-  void initState() {
-    super.initState();
-    _chargerResultats();
-  }
+  /// Convertit les lignes brutes de Supabase en modèles d'affichage, puis
+  /// recalcule les listes de filtres.
+  ///
+  /// Appelée depuis `build`, à chaque fois que le provider fournit des données.
+  /// Elle n'appelle **pas** `setState` — ce serait une boucle infinie. C'est
+  /// sans danger : la fonction est déterministe, elle ne fait que dériver des
+  /// champs à partir de ses entrées.
+  void _preparer(List<Map<String, dynamic>> response) {
+    List<MatchResult> loaded = [];
 
-  Future<void> _chargerResultats() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final categorie = prefs.getString('selected_category');
-      final saison = prefs.getString('selected_season');
+    for (var m in response) {
+      List<String> goals = [];
+      List<String> assists = [];
+      List<TabTireur> tabTireurs = [];
 
-      final response = await _matchRepo.matchsJoues(
-        categorie: categorie,
-        saison: saison,
-      );
-
-      List<MatchResult> loaded = [];
-
-      for (var m in response) {
-        List<String> goals = [];
-        List<String> assists = [];
-        List<TabTireur> tabTireurs = [];
-
-        if (m['actions'] != null) {
-          for (var action in m['actions']) {
-            final nom = action['joueurs']?['nom'] ?? 'Inconnu';
-            if (action['type'] == 'Goal') {
-              goals.add(nom);
-            } else if (action['type'] == 'Assist') {
-              assists.add(nom);
-            } else if (action['type'] == 'TAB_Reussi') {
-              tabTireurs.add(TabTireur(nom: nom, reussi: true));
-            } else if (action['type'] == 'TAB_Rate') {
-              tabTireurs.add(TabTireur(nom: nom, reussi: false));
-            }
+      if (m['actions'] != null) {
+        for (var action in m['actions']) {
+          final nom = action['joueurs']?['nom'] ?? 'Inconnu';
+          if (action['type'] == 'Goal') {
+            goals.add(nom);
+          } else if (action['type'] == 'Assist') {
+            assists.add(nom);
+          } else if (action['type'] == 'TAB_Reussi') {
+            tabTireurs.add(TabTireur(nom: nom, reussi: true));
+          } else if (action['type'] == 'TAB_Rate') {
+            tabTireurs.add(TabTireur(nom: nom, reussi: false));
           }
         }
-
-        loaded.add(
-          MatchResult(
-            id: m['id'].toString(),
-            date: DateTime.parse(m['date']),
-            equipe: m['equipe'] ?? '',
-            adversaire: _nomAdversaire(m),
-            competition: m['competition'] ?? 'Championnat',
-            lieu: m['lieu'] ?? '',
-            butsGjpb: m['buts_gjpb'] ?? 0,
-            butsAdv: m['buts_adv'] ?? 0,
-            tabFcpb: int.tryParse(m['tab_fcpb']?.toString() ?? ''),
-            tabAdv: int.tryParse(m['tab_adv']?.toString() ?? ''),
-            buteurs: goals,
-            passeurs: assists,
-            tabTireurs: tabTireurs,
-          ),
-        );
       }
 
-      setState(() {
-        _allMatches = loaded;
-        _listeEquipes = _valeursUniques(loaded.map((m) => m.equipe));
-        _listeCompet = _valeursUniques(loaded.map((m) => m.competition));
-        _listeAdversaires = _valeursUniques(loaded.map((m) => m.adversaire));
-        _filtresEquipes = _filtresEquipes.intersection(_listeEquipes.toSet());
-        _filtresCompet = _filtresCompet.intersection(_listeCompet.toSet());
-        _filtresLieux = _filtresLieux.intersection({'DOM', 'EXT'});
-        _filteredMatches = _filtrerMatches();
-        _isLoading = false;
-      });
-    } catch (e) {
-      print("Erreur: $e");
-      setState(() => _isLoading = false);
+      loaded.add(
+        MatchResult(
+          id: m['id'].toString(),
+          date: DateTime.parse(m['date']),
+          equipe: m['equipe'] ?? '',
+          adversaire: _nomAdversaire(m),
+          competition: m['competition'] ?? 'Championnat',
+          lieu: m['lieu'] ?? '',
+          butsGjpb: m['buts_gjpb'] ?? 0,
+          butsAdv: m['buts_adv'] ?? 0,
+          tabFcpb: int.tryParse(m['tab_fcpb']?.toString() ?? ''),
+          tabAdv: int.tryParse(m['tab_adv']?.toString() ?? ''),
+          buteurs: goals,
+          passeurs: assists,
+          tabTireurs: tabTireurs,
+        ),
+      );
     }
+
+    _allMatches = loaded;
+    _listeEquipes = _valeursUniques(loaded.map((m) => m.equipe));
+    _listeCompet = _valeursUniques(loaded.map((m) => m.competition));
+    _listeAdversaires = _valeursUniques(loaded.map((m) => m.adversaire));
+    _filtresEquipes = _filtresEquipes.intersection(_listeEquipes.toSet());
+    _filtresCompet = _filtresCompet.intersection(_listeCompet.toSet());
+    _filtresLieux = _filtresLieux.intersection({'DOM', 'EXT'});
+    _filteredMatches = _filtrerMatches();
   }
 
   void _appliquerFiltres() {
@@ -308,6 +290,13 @@ class _ResultatsPageState extends State<ResultatsPage> {
 
   @override
   Widget build(BuildContext context) {
+    // On s'abonne au provider. Si la saison ou la catégorie change, il se
+    // recharge tout seul et cette page se reconstruit — sans initState, sans
+    // SharedPreferences, et sans recharger quand on revient d'une autre page :
+    // Riverpod garde le résultat en cache.
+    final resultatsAsync = ref.watch(matchsJouesProvider);
+    resultatsAsync.whenData(_preparer);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('RÉSULTATS'),
@@ -341,8 +330,20 @@ class _ResultatsPageState extends State<ResultatsPage> {
             ),
           ),
           Expanded(
-            child: _isLoading
+            child: resultatsAsync.isLoading
                 ? const Center(child: CircularProgressIndicator())
+                : resultatsAsync.hasError
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        'Impossible de charger les résultats.\n'
+                        '${resultatsAsync.error}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  )
                 : _filteredMatches.isEmpty
                 ? const Center(
                     child: Text(

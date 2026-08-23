@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../providers/app_providers.dart';
 import '../theme/app_theme.dart';
 import '../widgets/menu_card.dart';
 
@@ -12,14 +14,14 @@ import 'login_page.dart';
 import 'resultats_page.dart';
 import 'stats_page.dart';
 
-class HomePage extends StatefulWidget {
+class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  ConsumerState<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends ConsumerState<HomePage> {
   String _categorieActuelle = "Chargement...";
   String? _selectedSeason;
   List<String> _availableSeasons = [];
@@ -45,11 +47,10 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _chargerSaisons() async {
-    final seasons = _buildAvailableSeasons();
-    final prefs = await SharedPreferences.getInstance();
+    final seasons = saisonsDisponibles();
     final selectedSeason = seasons.first;
 
-    await prefs.setString('selected_season', selectedSeason);
+    await majContexte(ref, saison: selectedSeason);
 
     if (mounted) {
       setState(() {
@@ -59,25 +60,12 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  List<String> _buildAvailableSeasons() {
-    const int firstSeasonStart = 2025;
-    final now = DateTime.now();
-    final currentSeasonStart = now.isBefore(DateTime(now.year, 5, 28))
-        ? now.year - 1
-        : now.year;
-
-    final seasons = <String>[];
-    for (int year = currentSeasonStart; year >= firstSeasonStart; year--) {
-      seasons.add('$year-${year + 1}');
-    }
-    return seasons;
-  }
-
   Future<void> _onSeasonChanged(String? saison) async {
     if (saison == null) return;
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('selected_season', saison);
+    // Enregistre la saison et invalide le contexte : toutes les pages
+    // rechargeront leurs données avec la nouvelle valeur.
+    await majContexte(ref, saison: saison);
 
     if (mounted) {
       setState(() {
