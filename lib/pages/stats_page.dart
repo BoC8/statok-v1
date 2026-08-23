@@ -1,6 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
+import '../widgets/compact_filter_button.dart';
 
 // ModÃ¨le pour les stats d'un joueur
 class PlayerStats {
@@ -33,13 +35,14 @@ class _StatsPageState extends State<StatsPage> {
   List<PlayerStats> _allStats = []; // Stats brutes
 
   // Filtres
-  String _filtreEquipe = 'Tout';
-  String _filtreCompet = 'Tout';
-  final List<String> _listeEquipes = ['17', '18A', '18B'];
-  final List<String> _listeCompet = ['Phase 1', 'Phase 2', 'Phase 3', 'Coupe', 'Amical'];
+  Set<String> _filtresEquipes = {};
+  Set<String> _filtresCompet = {};
+  Set<String> _filtresLieux = {};
+  List<String> _listeEquipes = [];
+  List<String> _listeCompet = [];
 
   // Mode de classement : 0 = Buteurs, 1 = Passeurs, 2 = Mixte
-  int _selectedTab = 0; 
+  int _selectedTab = 0;
 
   @override
   void initState() {
@@ -55,18 +58,25 @@ class _StatsPageState extends State<StatsPage> {
 
   Future<void> _chargerStats() async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final categorie = prefs.getString('selected_category');
+      final saison = prefs.getString('selected_season');
       // 1. RÃ©cupÃ©rer tous les joueurs
       final resJoueurs = await _client.from('joueurs').select();
-      
+
       // 2. RÃ©cupÃ©rer toutes les actions avec les infos du match liÃ©
       // On utilise la syntaxe matchs!inner pour Ãªtre sÃ»r d'avoir le match
-      final resActions = await _client.from('actions').select('type, joueur_id, matchs(equipe, competition)');
+      final resActions = await _client
+          .from('actions')
+          .select(
+            'type, joueur_id, matchs(equipe, competition, lieu, categorie, saison)',
+          );
 
-      Map<int, Map<String, dynamic>> statsMap = {};
+      Map<String, Map<String, dynamic>> statsMap = {};
 
       // Initialiser la map avec tous les joueurs (pour ceux qui ont 0 stats)
       for (var j in resJoueurs) {
-        statsMap[j['id']] = {
+        statsMap[j['id'].toString()] = {
           'name': j['nom'],
           'goals': 0,
           'assists': 0,
@@ -74,22 +84,38 @@ class _StatsPageState extends State<StatsPage> {
       }
 
       // Remplir avec les actions
+      final equipes = <String>{};
+      final competitions = <String>{};
       for (var action in resActions) {
         final match = action['matchs'];
         if (match == null) continue;
+        if (!_categorieMatches(categorie, match['categorie'])) continue;
+        if (saison != null && match['saison'] != saison) continue;
+
+        final equipe = match['equipe']?.toString() ?? '';
+        final competition = match['competition']?.toString() ?? '';
+        if (equipe.isNotEmpty) equipes.add(equipe);
+        if (competition.isNotEmpty) competitions.add(competition);
 
         // FILTRAGE BRUT ICI (pour calculer uniquement ce qui correspond aux filtres)
-        bool okEquipe = _filtreEquipe == 'Tout' || match['equipe'] == _filtreEquipe;
-        bool okCompet = _filtreCompet == 'Tout' || match['competition'] == _filtreCompet;
+        bool okEquipe =
+            _filtresEquipes.isEmpty ||
+            _filtresEquipes.contains(match['equipe']);
+        bool okCompet =
+            _filtresCompet.isEmpty ||
+            _filtresCompet.contains(match['competition']);
+        bool okLieu =
+            _filtresLieux.isEmpty ||
+            _filtresLieux.contains(_lieuCode(match['lieu']));
 
-        if (okEquipe && okCompet) {
-          final jId = action['joueur_id'];
+        if (okEquipe && okCompet && okLieu) {
+          final jId = action['joueur_id'].toString();
           final type = action['type'];
 
           if (statsMap.containsKey(jId)) {
             if (type == 'Goal') {
               statsMap[jId]!['goals']++;
-            } else {
+            } else if (type == 'Assist') {
               statsMap[jId]!['assists']++;
             }
           }
@@ -102,28 +128,46 @@ class _StatsPageState extends State<StatsPage> {
         // On ne garde que ceux qui ont au moins 1 stat (sinon la liste est trop longue)
         int total = value['goals'] + value['assists'];
         if (total > 0) {
-          computed.add(PlayerStats(
-            name: value['name'],
-            goals: value['goals'],
-            assists: value['assists'],
-            total: total,
-          ));
+          computed.add(
+            PlayerStats(
+              name: value['name'],
+              goals: value['goals'],
+              assists: value['assists'],
+              total: total,
+            ),
+          );
         }
       });
 
       setState(() {
+        _listeEquipes = equipes.toList()..sort();
+        _listeCompet = competitions.toList()..sort();
+        _filtresEquipes = _filtresEquipes.intersection(equipes);
+        _filtresCompet = _filtresCompet.intersection(competitions);
+        _filtresLieux = _filtresLieux.intersection({'DOM', 'EXT'});
         _allStats = computed;
         _isLoading = false;
       });
-
+      _syncPageControllerWithSelectedTab();
     } catch (e) {
       print("Erreur stats: $e");
       setState(() => _isLoading = false);
     }
   }
 
+  void _syncPageControllerWithSelectedTab() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_pageController.hasClients || _allStats.isEmpty) return;
+      _pageController.jumpToPage(_selectedTab);
+    });
+  }
+
   List<PlayerStats> _getSortedStatsForTab(int tabIndex) {
-    List<PlayerStats> sorted = List.from(_allStats);
+    List<PlayerStats> sorted = _allStats.where((player) {
+      if (tabIndex == 0) return player.goals > 0;
+      if (tabIndex == 1) return player.assists > 0;
+      return true;
+    }).toList();
 
     if (tabIndex == 0) {
       // BUTEURS : Buts > Passes
@@ -157,6 +201,32 @@ class _StatsPageState extends State<StatsPage> {
     return AppTheme.bleuMarine;
   }
 
+  String? _categoriePourDb(String? categorie) {
+    switch (categorie) {
+      case 'U14 - U15':
+        return 'U14-15';
+      case 'U16 - U17 - U18':
+        return 'U16-17-18';
+      case 'SENIORS':
+      case 'Seniors':
+        return 'Seniors';
+    }
+    return categorie;
+  }
+
+  bool _categorieMatches(String? selected, dynamic dbValue) {
+    if (selected == null) return true;
+    final db = dbValue?.toString();
+    return db == selected || db == _categoriePourDb(selected);
+  }
+
+  String _lieuCode(dynamic lieu) {
+    final value = lieu?.toString().trim().toUpperCase() ?? '';
+    if (value.startsWith('DOM')) return 'DOM';
+    if (value.startsWith('EXT')) return 'EXT';
+    return value;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -169,17 +239,23 @@ class _StatsPageState extends State<StatsPage> {
       backgroundColor: Colors.grey[50],
       body: Column(
         children: [
-          // 1. FILTRES (MÃªme style que Resultats/Calendrier)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Colors.black12))),
-            child: Row(
-              children: [
-                Expanded(child: _buildPrettyFilter(value: _filtreEquipe, label: "Ã‰quipe", icon: Icons.groups, items: ['Tout', ..._listeEquipes], onChanged: (v) { setState(() { _filtreEquipe = v!; _isLoading = true; }); _chargerStats(); })),
-                const SizedBox(width: 12),
-                Expanded(child: _buildPrettyFilter(value: _filtreCompet, label: "CompÃ©tition", icon: Icons.emoji_events, items: ['Tout', ..._listeCompet], onChanged: (v) { setState(() { _filtreCompet = v!; _isLoading = true; }); _chargerStats(); })),
-              ],
-            ),
+          // 1. FILTRES
+          CompactFilterButton(
+            equipes: _listeEquipes,
+            competitions: _listeCompet,
+            selectedEquipes: _filtresEquipes,
+            selectedCompetitions: _filtresCompet,
+            selectedLieux: _filtresLieux,
+            competitionColor: _getColorForCompet,
+            onApply: (equipes, competitions, lieux) {
+              setState(() {
+                _filtresEquipes = equipes;
+                _filtresCompet = competitions;
+                _filtresLieux = lieux;
+                _isLoading = true;
+              });
+              _chargerStats();
+            },
           ),
 
           // 2. BOUTONS DE SÃ‰LECTION (Tabs)
@@ -204,18 +280,18 @@ class _StatsPageState extends State<StatsPage> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _allStats.isEmpty
-                    ? const Center(child: Text("Aucune statistique disponible."))
-                    : PageView(
-                        controller: _pageController,
-                        onPageChanged: (index) {
-                          setState(() => _selectedTab = index);
-                        },
-                        children: [
-                          _buildClassementContent(0),
-                          _buildClassementContent(1),
-                          _buildClassementContent(2),
-                        ],
-                      ),
+                ? const Center(child: Text("Aucune statistique disponible."))
+                : PageView(
+                    controller: _pageController,
+                    onPageChanged: (index) {
+                      setState(() => _selectedTab = index);
+                    },
+                    children: [
+                      _buildClassementContent(0),
+                      _buildClassementContent(1),
+                      _buildClassementContent(2),
+                    ],
+                  ),
           ),
         ],
       ),
@@ -242,7 +318,15 @@ class _StatsPageState extends State<StatsPage> {
           decoration: BoxDecoration(
             color: isSelected ? Colors.white : Colors.transparent,
             borderRadius: BorderRadius.circular(25),
-            boxShadow: isSelected ? [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4, offset: const Offset(0, 2))] : [],
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : [],
           ),
           child: Text(
             title,
@@ -271,21 +355,22 @@ class _StatsPageState extends State<StatsPage> {
           ),
         if (stats.length > 3)
           SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final realIndex = index + 3;
-                final player = stats[realIndex];
-                final prevPlayer = stats[realIndex - 1];
+            delegate: SliverChildBuilderDelegate((context, index) {
+              final realIndex = index + 3;
+              final player = stats[realIndex];
+              final prevPlayer = stats[realIndex - 1];
 
-                String rankStr = "${realIndex + 1}";
-                int currentScore = tabIndex == 0 ? player.goals : (tabIndex == 1 ? player.assists : player.total);
-                int prevScore = tabIndex == 0 ? prevPlayer.goals : (tabIndex == 1 ? prevPlayer.assists : prevPlayer.total);
-                if (currentScore == prevScore) rankStr = "-";
+              String rankStr = "${realIndex + 1}";
+              int currentScore = tabIndex == 0
+                  ? player.goals
+                  : (tabIndex == 1 ? player.assists : player.total);
+              int prevScore = tabIndex == 0
+                  ? prevPlayer.goals
+                  : (tabIndex == 1 ? prevPlayer.assists : prevPlayer.total);
+              if (currentScore == prevScore) rankStr = "-";
 
-                return _buildStatRow(player, rankStr, tabIndex);
-              },
-              childCount: stats.length - 3,
-            ),
+              return _buildStatRow(player, rankStr, tabIndex);
+            }, childCount: stats.length - 3),
           ),
         const SliverPadding(padding: EdgeInsets.only(bottom: 40)),
       ],
@@ -303,25 +388,56 @@ class _StatsPageState extends State<StatsPage> {
       crossAxisAlignment: CrossAxisAlignment.end, // Aligner en bas
       children: [
         // 2ND PLACE (Gauche)
-        if (second != null) _buildPodiumStep(second, 2, 120, const Color(0xFFC0C0C0), tabIndex), // Argent
-        
+        if (second != null)
+          _buildPodiumStep(
+            second,
+            2,
+            120,
+            const Color(0xFFC0C0C0),
+            tabIndex,
+          ), // Argent
         // 1ST PLACE (Centre, plus grand)
-        if (first != null) _buildPodiumStep(first, 1, 150, const Color(0xFFFFD700), tabIndex), // Or
-        
+        if (first != null)
+          _buildPodiumStep(
+            first,
+            1,
+            150,
+            const Color(0xFFFFD700),
+            tabIndex,
+          ), // Or
         // 3RD PLACE (Droite)
-        if (third != null) _buildPodiumStep(third, 3, 100, const Color(0xFFCD7F32), tabIndex), // Bronze
+        if (third != null)
+          _buildPodiumStep(
+            third,
+            3,
+            100,
+            const Color(0xFFCD7F32),
+            tabIndex,
+          ), // Bronze
       ],
     );
   }
 
-  Widget _buildPodiumStep(PlayerStats player, int rank, double height, Color color, int tabIndex) {
-    int score = tabIndex == 0 ? player.goals : (tabIndex == 1 ? player.assists : player.total);
+  Widget _buildPodiumStep(
+    PlayerStats player,
+    int rank,
+    double height,
+    Color color,
+    int tabIndex,
+  ) {
+    int score = tabIndex == 0
+        ? player.goals
+        : (tabIndex == 1 ? player.assists : player.total);
     String mainLabel = tabIndex == 0
         ? _formatButs(score)
         : (tabIndex == 1 ? _formatPasses(score) : "$score total");
     String? secondaryLabel;
     if (tabIndex == 0) secondaryLabel = _formatPasses(player.assists);
     if (tabIndex == 1) secondaryLabel = _formatButs(player.goals);
+    if (tabIndex == 2) {
+      secondaryLabel =
+          "${_formatButs(player.goals)}\n${_formatPasses(player.assists)}";
+    }
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -347,27 +463,58 @@ class _StatsPageState extends State<StatsPage> {
                 end: Alignment.bottomCenter,
                 colors: [color.withOpacity(0.8), color],
               ),
-              borderRadius: const BorderRadius.only(topLeft: Radius.circular(8), topRight: Radius.circular(8)),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 5, offset: const Offset(0, 3))],
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(8),
+                topRight: Radius.circular(8),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 5,
+                  offset: const Offset(0, 3),
+                ),
+              ],
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
                   "$rank",
-                  style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.3), borderRadius: BorderRadius.circular(10)),
-                  child: Text(mainLabel, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    mainLabel,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
                 if (secondaryLabel != null) ...[
                   const SizedBox(height: 4),
                   Text(
                     secondaryLabel,
-                    style: TextStyle(color: Colors.white.withOpacity(0.95), fontSize: 10, fontWeight: FontWeight.w600),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.95),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               ],
@@ -379,20 +526,32 @@ class _StatsPageState extends State<StatsPage> {
   }
 
   Widget _buildStatRow(PlayerStats player, String rank, int tabIndex) {
-    int mainScore = tabIndex == 0 ? player.goals : (tabIndex == 1 ? player.assists : player.total);
+    int mainScore = tabIndex == 0
+        ? player.goals
+        : (tabIndex == 1 ? player.assists : player.total);
     // Info secondaire (ex: si on est en buteur, on montre aussi les passes en petit)
     String subInfo = "";
-    if (tabIndex == 0) subInfo = _formatPasses(player.assists);
-    else if (tabIndex == 1) subInfo = _formatButs(player.goals);
-    else subInfo = "${_formatButs(player.goals)} / ${_formatPasses(player.assists)}";
+    if (tabIndex == 0)
+      subInfo = _formatPasses(player.assists);
+    else if (tabIndex == 1)
+      subInfo = _formatButs(player.goals);
+    else
+      subInfo =
+          "${_formatButs(player.goals)} / ${_formatPasses(player.assists)}";
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 5, offset: const Offset(0, 2))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -401,7 +560,11 @@ class _StatsPageState extends State<StatsPage> {
             width: 30,
             child: Text(
               rank,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.grey),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: Colors.grey,
+              ),
               textAlign: TextAlign.center,
             ),
           ),
@@ -411,21 +574,35 @@ class _StatsPageState extends State<StatsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(player.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppTheme.bleuMarine)),
-                Text(subInfo, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                Text(
+                  player.name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    color: AppTheme.bleuMarine,
+                  ),
+                ),
+                Text(
+                  subInfo,
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
               ],
             ),
           ),
           // Score Principal
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(5),
             decoration: BoxDecoration(
               color: AppTheme.bleuClair.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
             child: Text(
               "$mainScore",
-              style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.bleuMarine, fontSize: 16),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: AppTheme.bleuMarine,
+                fontSize: 16,
+              ),
             ),
           ),
         ],
@@ -442,21 +619,4 @@ class _StatsPageState extends State<StatsPage> {
     final unit = value <= 1 ? "passe" : "passes";
     return "$value $unit";
   }
-
-  // Widget Filtre (Le mÃªme que Resultats/Calendrier)
-  Widget _buildPrettyFilter({required String value, required String label, required IconData icon, required List<String> items, required Function(String?) onChanged}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-      height: 45,
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(30), border: Border.all(color: Colors.grey.shade300), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5, offset: const Offset(0, 2))]),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: AppTheme.bleuMarine),
-          const SizedBox(width: 8),
-          Expanded(child: DropdownButtonHideUnderline(child: DropdownButton<String>(value: value, isExpanded: true, icon: const Icon(Icons.keyboard_arrow_down, size: 20, color: Colors.grey), items: items.map((e) { Color textColor = Colors.black87; if (label == "CompÃ©tition" && e != 'Tout') { textColor = _getColorForCompet(e); } return DropdownMenuItem(value: e, child: Row(children: [ if (label == "CompÃ©tition" && e != 'Tout') ...[ Container(width: 8, height: 8, decoration: BoxDecoration(color: textColor, shape: BoxShape.circle)), const SizedBox(width: 8)], Text(e == 'Tout' ? 'Tout' : e, style: TextStyle(fontSize: 13, color: textColor, fontWeight: (label == "CompÃ©tition" && e != 'Tout') ? FontWeight.bold : FontWeight.normal), overflow: TextOverflow.ellipsis)])); }).toList(), onChanged: onChanged))),
-        ],
-      ),
-    );
-  }
 }
-

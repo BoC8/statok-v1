@@ -44,3 +44,44 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 **/android/key.properties
+
+# =====================================================================
+# AJOUTS — 22 août 2026
+# =====================================================================
+
+# --- SIGNATURE & CERTIFICATS : NE JAMAIS COMMITER ---
+# Le build iOS passe par les GitHub Secrets (P12_BASE64, etc.),
+# ces fichiers n'ont donc rien à faire dans le dépôt.
+certificates-mac/
+*.p12
+*.certSigningRequest
+*.mobileprovision
+*.cer
+*.pem
+*.jks
+*.keystore
+
+# --- Secrets applicatifs ---
+.env
+.env.*
+*.env
+
+# --- iOS : artefacts générés par CocoaPods / Flutter ---
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/ephemeral/
+ios/build/
+
+# --- macOS ---
+macos/Pods/
+macos/Flutter/ephemeral/
+
+# --- Windows / Linux desktop ---
+windows/flutter/ephemeral/
+linux/flutter/ephemeral/
+
+# --- Gestionnaire de versions Flutter ---
+.fvm/
+.fvmrc

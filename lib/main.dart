@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 // Importe tes fichiers
-import 'pages/home_page.dart';
+import 'package:statok/pages/category_selection_page.dart';
 import 'theme/app_theme.dart';
 import 'supabase_config.dart'; // <-- On importe tes clés ici
 
@@ -13,18 +14,15 @@ Future<void> main() async {
 
   // Initialisation Supabase avec les constantes de ton fichier config
   await Supabase.initialize(
-    url: supabaseUrl,      // Assure-toi que la variable s'appelle bien comme ça dans supabase_config.dart
+    url:
+        supabaseUrl, // Assure-toi que la variable s'appelle bien comme ça dans supabase_config.dart
     anonKey: supabaseAnonKey,
   );
 
   // Formatage des dates en français
   await initializeDateFormatting('fr_FR', null);
 
-  runApp(
-    const ProviderScope(
-      child: MyApp(),
-    ),
-  );
+  runApp(const ProviderScope(child: MyApp()));
 }
 
 class MyApp extends StatelessWidget {
@@ -33,10 +31,17 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'GJPB App',
+      title: 'FCPB App',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: const HomePage(),
+      locale: const Locale('fr', 'FR'),
+      supportedLocales: const [Locale('fr', 'FR')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: const CategorySelectionPage(),
     );
   }
 }

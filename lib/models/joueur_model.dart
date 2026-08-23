@@ -1,24 +1,34 @@
 class JoueurModel {
-  final int id;
+  final String id;
   final String nom;
-  // Tu pourras ajouter 'prenom', 'poste', 'equipe' ici si tu ajoutes ces colonnes en base plus tard.
-  // Pour l'instant on se base sur ton schéma actuel : id, nom.
+  final String? genre;
+  final String? categorieDetail;
+  final bool actif;
 
   JoueurModel({
     required this.id,
     required this.nom,
+    this.genre,
+    this.categorieDetail,
+    this.actif = true,
   });
 
   factory JoueurModel.fromJson(Map<String, dynamic> json) {
     return JoueurModel(
-      id: json['id'],
-      nom: json['nom'],
+      id: json['id'].toString(),
+      nom: json['nom'] ?? '',
+      genre: json['genre']?.toString(),
+      categorieDetail: json['categorie_detail']?.toString(),
+      actif: json['actif'] != false,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'nom': nom,
+      'genre': genre,
+      'categorie_detail': categorieDetail,
+      'actif': actif,
     };
   }
 }

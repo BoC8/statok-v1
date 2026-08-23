@@ -1,17 +1,56 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/equipe_service.dart';
 import '../theme/app_theme.dart';
-import 'equipe_dashboard_page.dart'; // On va le créer juste après
+import 'equipe_dashboard_page.dart';
 
-class EquipesSelectionPage extends StatelessWidget {
+class EquipesSelectionPage extends StatefulWidget {
   const EquipesSelectionPage({super.key});
 
-  final List<String> _equipes = const ['18A', '18B', '17'];
+  @override
+  State<EquipesSelectionPage> createState() => _EquipesSelectionPageState();
+}
+
+class _EquipesSelectionPageState extends State<EquipesSelectionPage> {
+  final SupabaseClient _client = Supabase.instance.client;
+
+  List<String> _equipes = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _chargerEquipes();
+  }
+
+  Future<void> _chargerEquipes() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final categorie = prefs.getString('selected_category');
+      final saison = prefs.getString('selected_season');
+      final equipes = await EquipeService(
+        _client,
+      ).chargerEquipes(categorie: categorie, saison: saison);
+
+      if (mounted) {
+        setState(() {
+          _equipes = equipes;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('NOS ÉQUIPES'),
+        title: const Text('NOS \u00c9QUIPES'),
         backgroundColor: AppTheme.bleuMarine,
         foregroundColor: Colors.white,
         centerTitle: true,
@@ -19,16 +58,11 @@ class EquipesSelectionPage extends StatelessWidget {
       backgroundColor: Colors.grey[50],
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            const Text(
-              " ",
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey, fontSize: 16),
-            ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: ListView.separated(
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _equipes.isEmpty
+            ? const Center(child: Text("Aucune \u00e9quipe trouv\u00e9e."))
+            : ListView.separated(
                 itemCount: _equipes.length,
                 separatorBuilder: (ctx, i) => const SizedBox(height: 16),
                 itemBuilder: (context, index) {
@@ -36,9 +70,6 @@ class EquipesSelectionPage extends StatelessWidget {
                   return _buildTeamCard(context, equipe);
                 },
               ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -49,7 +80,6 @@ class EquipesSelectionPage extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         onTap: () {
-          // Navigation vers le tableau de bord de l'équipe
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -70,16 +100,20 @@ class EquipesSelectionPage extends StatelessWidget {
               const SizedBox(width: 16),
               Expanded(
                 child: Text(
-                  "Équipe $equipe",
+                  "\u00c9quipe $equipe",
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
-                    fontWeight: FontWeight.w600
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
-              const Icon(Icons.arrow_forward_ios, color: Colors.white54, size: 16),
+              const Icon(
+                Icons.arrow_forward_ios,
+                color: Colors.white54,
+                size: 16,
+              ),
             ],
           ),
         ),
