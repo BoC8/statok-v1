@@ -7,8 +7,9 @@
 > assistant IA : le lire suffit pour comprendre l'app sans ouvrir les 10 000 lignes.
 > **À mettre à jour quand la structure change** (nouvel écran, nouvelle table, refonte).
 >
-> Dernière mise à jour : 22 août 2026 · version `pubspec` : 1.0.1+10
+> Dernière mise à jour : 23 août 2026 · version `pubspec` : 1.0.2
 > Schéma de la base : voir **`docs/schema.sql`**
+> Signature iOS : voir **`docs/certificat-ios-sans-mac.md`**
 
 ---
 
@@ -296,7 +297,7 @@ corriger un bug à un seul endroit :
 
 Classés par rapport bénéfice/risque, du plus rentable au plus lourd.
 
-### 🔴 Incident — certificat Apple exposé (22 août 2026)
+### ✅ RÉSOLU — Incident certificat Apple exposé (22-23 août 2026)
 
 `certificates-mac/Certificates.p12` — le **certificat de signature Apple, clé privée
 incluse** — a été commité (commit `93160ba`, « Première configuration du build iOS ») et
@@ -307,29 +308,60 @@ Le CI n'en a **pas** besoin : `.github/workflows/ios_build.yml` passe par les Gi
 Secrets (`P12_BASE64`, `MOBILEPROVISION_BASE64`, `P12_PASSWORD`). Le fichier était donc
 du poids mort exposé pour rien.
 
-Traitement :
-1. **Révoquer** le certificat sur developer.apple.com → Certificates, Identifiers &
-   Profiles. C'est la seule action qui le neutralise vraiment.
-2. En regénérer un + un nouveau provisioning profile, mettre à jour les GitHub Secrets.
-3. `git rm --cached -r certificates-mac` + entrées `.gitignore` (fait).
+Traitement effectué le 23 août 2026 :
 
-Une fois le certificat révoqué, réécrire l'historique Git n'est plus nécessaire : la
-copie qui traîne dans l'historique ne vaut plus rien.
+1. ✅ Nouveau certificat de distribution généré **depuis Windows, sans Mac** — clé RSA
+   2048 + CSR via OpenSSL, `.p12` reconstitué en local
+   (procédure complète : `docs/certificat-ios-sans-mac.md`)
+2. ✅ Nouveau provisioning profile `Statok_Distribution_Profile`
+3. ✅ Secrets GitHub mis à jour (`P12_BASE64`, `MOBILEPROVISION_BASE64`, `P12_PASSWORD`)
+4. ✅ Build CI vérifié vert de bout en bout (build + upload TestFlight)
+5. ✅ Ancien certificat (expiration 2027/02/10) **révoqué** sur developer.apple.com
+6. ✅ `certificates-mac/` retiré du suivi Git et supprimé du disque ;
+   `.gitignore` bloque désormais `*.p12`, `*.cer`, `*.mobileprovision`
+
+Réécrire l'historique Git n'est pas nécessaire : le certificat étant révoqué, la copie
+qui traîne dans les vieux commits ne vaut plus rien.
+
+**Clé privée** : `statok-distribution.key` + `Certificate.p12` + mot de passe sont dans
+`C:\Users\cleme\certificats-statok`, **hors du dépôt**. Sans la clé privée, le
+certificat Apple est inutilisable — à sauvegarder ailleurs qu'à un seul endroit.
 
 **Conséquence annexe** : le dépôt étant public, `lib/supabase_config.dart` et sa clé
 `anon` le sont aussi. C'est le fonctionnement prévu par Supabase — **à condition que la
 RLS soit active**. Elle n'est plus « recommandée », elle est indispensable. (Vérifié :
 aucune clé `service_role` dans l'historique des 39 commits.)
 
-### 🔴 Urgent — état du dépôt Git
+### ✅ RÉSOLU — état du dépôt Git (23 août 2026)
 
-- **110 fichiers non commités**, dont ~90 ne sont que du bruit de fins de ligne
-  (CRLF ↔ LF). Correctif appliqué : `.gitattributes` avec `* text=auto eol=lf`.
-- Mais **15 fichiers portent de vraies modifications** (~6 000 lignes) jamais commitées.
-- Pire : `lib/services/`, `lib/pages/admin/equipes_admin_tab.dart`,
-  `lib/pages/category_selection_page.dart`, `lib/widgets/compact_filter_button.dart`
-  et les logos ne sont **pas suivis du tout** par Git. Le dernier commit `v10` ne
-  contient pas une partie de l'app actuelle. **Un disque qui lâche = travail perdu.**
+Constat initial : 110 fichiers non commités, dont ~90 de pur bruit de fins de ligne
+(CRLF ↔ LF), 15 fichiers avec ~6 000 lignes de vraies modifications jamais sauvegardées,
+et surtout `lib/services/`, `equipes_admin_tab.dart`, `category_selection_page.dart`,
+`compact_filter_button.dart` et les logos **pas suivis du tout**.
+
+Correctifs :
+- `.gitattributes` (`* text=auto eol=lf`) → plus de faux « fichiers modifiés »
+- Tout le travail commité et poussé, en deux commits séparés (le vrai travail d'un côté,
+  la normalisation technique de l'autre)
+- `main` relié à `origin/main` (`git push -u`), 188 fichiers suivis
+
+### ✅ RÉSOLU — coût et déclenchement du CI (23 août 2026)
+
+`.github/workflows/ios_build.yml`, trois changements :
+
+| Avant | Après | Pourquoi |
+|---|---|---|
+| `runs-on: macos-latest-large` | `runs-on: macos-latest` | Les *larger runners* sont facturés **même sur un dépôt public** ; les runners standard y sont gratuits et illimités |
+| `on: push: branches: [main]` | `on: workflow_dispatch` + `push: tags: ["v*"]` | Un build à chaque commit déclenchait un upload TestFlight — et donc une erreur de version à répétition |
+| build number manuel dans `pubspec.yaml` | `github.run_number + 100` | Plus jamais l'erreur « bundle version already used » |
+
+**Règle de versionnage à retenir** : `version: 1.0.x+N` dans `pubspec.yaml`.
+- `1.0.x` = version publique. Une fois **approuvée** par Apple, son « train » est fermé :
+  il faut incrémenter pour livrer à nouveau. C'est la seule partie restée manuelle.
+- `+N` = numéro de build, désormais généré par le CI. Ne plus y toucher.
+
+Pour livrer : bouton **Run workflow** dans l'onglet Actions, ou
+`git tag v1.0.3 && git push origin v1.0.3`.
 
 ### 🔴 Bug confirmé — suppression d'un match
 
@@ -354,14 +386,35 @@ Deux correctifs possibles (les faire tous les deux) :
 2. **Côté Dart** — supprimer les actions d'abord, et entourer d'un `try/catch` avec un
    `SnackBar` d'erreur (comme le fait déjà `_sauvegarderModifs`).
 
-### 🟠 Sécurité
+### ✅ RÉSOLU — Row Level Security Supabase (23 août 2026)
 
-- `lib/supabase_config.dart` est suivi par Git. La clé `anon` est publique par nature,
-  donc ce n'est pas grave **à condition que la RLS (Row Level Security) soit activée sur
-  les 6 tables**. À vérifier dans le dashboard Supabase. Sans RLS, n'importe qui peut
-  lire *et écrire* dans la base depuis l'app décompilée.
-- Écriture (`insert`/`update`/`delete`) réservée à l'admin : c'est vrai dans l'UI, mais
-  ça doit aussi être vrai en **policies Postgres**.
+**Constat initial** : les 7 tables étaient en `RLS DISABLED`, sans aucune policy.
+Supabase l'affichait en clair : *« This table can be accessed by anyone via the Data
+API. »* Le dépôt étant public, la clé `anon` l'est aussi — et une clé `anon` ne protège
+rien par elle-même, c'est la RLS qui protège. N'importe qui pouvait donc, en une requête
+HTTP, non seulement lire mais **modifier et supprimer** toutes les données.
+
+**Correctif appliqué** — script `docs/rls_policies.sql`, rejouable :
+
+| Rôle | Droits |
+|---|---|
+| `anon` (app publique, non connecté) | `SELECT` uniquement |
+| `authenticated` (coach connecté) | `SELECT` + `INSERT` + `UPDATE` + `DELETE` |
+
+Deux policies par table (`lecture_publique`, `ecriture_authentifiee`), sur les 7 tables.
+Vérifié : `rls_active = true`, `nb_policies = 2` partout, et l'app testée de bout en
+bout — lecture publique et écritures admin fonctionnelles.
+
+**Pourquoi c'était sans risque** : audit du code au préalable — aucune écriture ne part
+du côté public. Tous les `insert`/`update`/`delete` sont dans `pages/admin/*`, derrière
+l'authentification. `equipe_service` n'écrit que si appelé avec `persistHistorique: true`,
+ce qui n'arrive que depuis `EquipesAdminTab`.
+
+Vérifié aussi : aucune clé `service_role` n'a jamais été commitée dans les 39 commits.
+
+> ⚠️ **À refaire pour toute nouvelle table.** Une table créée dans Supabase arrive avec
+> la RLS désactivée par défaut. Rejouer `docs/rls_policies.sql` après l'avoir ajoutée à
+> la liste du script.
 - 4 `print()` restants en production (`catch (e) { print(...) }`) — à remplacer par un
   vrai log ou un message utilisateur.
 - Plusieurs `catch (_) {}` silencieux dans `equipe_service.dart` masquent les erreurs.
