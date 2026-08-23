@@ -1,11 +1,9 @@
-﻿import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
 import '../widgets/compact_filter_button.dart';
-
-import '../utils/categorie_utils.dart';
+import '../repositories/match_repository.dart';
 
 // Modèle spécifique pour les Résultats
 class TabTireur {
@@ -57,7 +55,7 @@ class ResultatsPage extends StatefulWidget {
 }
 
 class _ResultatsPageState extends State<ResultatsPage> {
-  final SupabaseClient _client = Supabase.instance.client;
+  final MatchRepository _matchRepo = MatchRepository();
 
   // Données
   List<MatchResult> _allMatches = [];
@@ -88,18 +86,10 @@ class _ResultatsPageState extends State<ResultatsPage> {
       final categorie = prefs.getString('selected_category');
       final saison = prefs.getString('selected_season');
 
-      // Filtrage CÔTÉ SERVEUR : on ne télécharge que les matchs de la
-      // catégorie et de la saison affichées, au lieu de rapatrier toute la
-      // table pour en jeter la majorité en Dart.
-      final dbCategorie = categoriePourDb(categorie);
-
-      var query = _client
-          .from('matchs')
-          .select('*, adversaires(nom), actions(type, joueurs(nom))');
-      if (dbCategorie != null) query = query.eq('categorie', dbCategorie);
-      if (saison != null) query = query.eq('saison', saison);
-
-      final response = await query.order('date', ascending: false);
+      final response = await _matchRepo.matchsJoues(
+        categorie: categorie,
+        saison: saison,
+      );
 
       List<MatchResult> loaded = [];
 

@@ -1,12 +1,10 @@
 ﻿import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../theme/app_theme.dart';
 import '../widgets/compact_filter_button.dart';
-
-import '../utils/categorie_utils.dart';
+import '../repositories/match_repository.dart';
 
 class EquipeDashboardPage extends StatefulWidget {
   final String equipeName;
@@ -18,7 +16,7 @@ class EquipeDashboardPage extends StatefulWidget {
 }
 
 class _EquipeDashboardPageState extends State<EquipeDashboardPage> {
-  final SupabaseClient _client = Supabase.instance.client;
+  final MatchRepository _matchRepo = MatchRepository();
 
   bool _isLoading = true;
   List<Map<String, dynamic>> _allMatches = [];
@@ -41,25 +39,16 @@ class _EquipeDashboardPageState extends State<EquipeDashboardPage> {
       final categorie = prefs.getString('selected_category');
       final saison = prefs.getString('selected_season');
 
-      // Filtrage CÔTÉ SERVEUR : catégorie et saison en plus de l'équipe.
-      final dbCategorie = categoriePourDb(categorie);
-
-      var qMatches = _client
-          .from('matchs')
-          .select('*, adversaires(nom), actions(type, joueurs(nom))')
-          .eq('equipe', widget.equipeName);
-      if (dbCategorie != null) qMatches = qMatches.eq('categorie', dbCategorie);
-      if (saison != null) qMatches = qMatches.eq('saison', saison);
-      final resMatches = await qMatches.order('date', ascending: false);
-
-      var qProg = _client
-          .from('programmations')
-          .select('*, adversaires(nom)')
-          .eq('equipe', widget.equipeName)
-          .gte('date', DateTime.now().toIso8601String());
-      if (dbCategorie != null) qProg = qProg.eq('categorie', dbCategorie);
-      if (saison != null) qProg = qProg.eq('saison', saison);
-      final resProg = await qProg.order('date', ascending: true).limit(10);
+      final resMatches = await _matchRepo.matchsDeLEquipe(
+        widget.equipeName,
+        categorie: categorie,
+        saison: saison,
+      );
+      final resProg = await _matchRepo.prochainesProgrammations(
+        widget.equipeName,
+        categorie: categorie,
+        saison: saison,
+      );
 
       final filteredMatches = List<Map<String, dynamic>>.from(resMatches);
       final filteredProgs = List<Map<String, dynamic>>.from(resProg);

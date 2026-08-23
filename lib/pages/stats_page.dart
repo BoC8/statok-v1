@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../widgets/compact_filter_button.dart';
-
-import '../utils/categorie_utils.dart';
+import '../repositories/stats_repository.dart';
 
 // Modèle pour les stats d'un joueur
 class PlayerStats {
@@ -29,7 +27,7 @@ class StatsPage extends StatefulWidget {
 }
 
 class _StatsPageState extends State<StatsPage> {
-  final SupabaseClient _client = Supabase.instance.client;
+  final StatsRepository _statsRepo = StatsRepository();
   final PageController _pageController = PageController(initialPage: 0);
 
   // --- VARIABLES D'ÉTAT ---
@@ -63,25 +61,11 @@ class _StatsPageState extends State<StatsPage> {
       final prefs = await SharedPreferences.getInstance();
       final categorie = prefs.getString('selected_category');
       final saison = prefs.getString('selected_season');
-      // 1. Récupérer tous les joueurs
-      final resJoueurs = await _client.from('joueurs').select();
-
-      // 2. Récupérer les actions avec les infos du match lié.
-      // Filtrage CÔTÉ SERVEUR via la table liée. Le "!inner" rend la jointure
-      // obligatoire, ce qui autorise à filtrer sur les colonnes de matchs.
-      final dbCategorie = categoriePourDb(categorie);
-
-      var qActions = _client
-          .from('actions')
-          .select(
-            'type, joueur_id, matchs!inner(equipe, competition, lieu, categorie, saison)',
-          );
-      if (dbCategorie != null) {
-        qActions = qActions.eq('matchs.categorie', dbCategorie);
-      }
-      if (saison != null) qActions = qActions.eq('matchs.saison', saison);
-
-      final resActions = await qActions;
+      final resJoueurs = await _statsRepo.tousLesJoueurs();
+      final resActions = await _statsRepo.actionsAvecMatch(
+        categorie: categorie,
+        saison: saison,
+      );
 
       Map<String, Map<String, dynamic>> statsMap = {};
 

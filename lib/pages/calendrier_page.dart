@@ -1,12 +1,10 @@
-﻿import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../theme/app_theme.dart';
 import '../widgets/compact_filter_button.dart';
-
-import '../utils/categorie_utils.dart';
+import '../repositories/match_repository.dart';
 
 // --- MODÈLES DE DONNÉES ---
 class TabTireur {
@@ -64,7 +62,7 @@ class CalendrierPage extends StatefulWidget {
 }
 
 class _CalendrierPageState extends State<CalendrierPage> {
-  final SupabaseClient _client = Supabase.instance.client;
+  final MatchRepository _matchRepo = MatchRepository();
   final ScrollController _scrollController = ScrollController();
 
   // Calendrier
@@ -103,21 +101,14 @@ class _CalendrierPageState extends State<CalendrierPage> {
       final prefs = await SharedPreferences.getInstance();
       final categorie = prefs.getString('selected_category');
       final saison = prefs.getString('selected_season');
-      // Filtrage CÔTÉ SERVEUR : seules les lignes de la catégorie et de la
-      // saison affichées sont téléchargées.
-      final dbCategorie = categoriePourDb(categorie);
-
-      var qProgs = _client.from('programmations').select('*, adversaires(nom)');
-      if (dbCategorie != null) qProgs = qProgs.eq('categorie', dbCategorie);
-      if (saison != null) qProgs = qProgs.eq('saison', saison);
-      final resProgs = await qProgs;
-
-      var qMatchs = _client
-          .from('matchs')
-          .select('*, adversaires(nom), actions(type, joueurs(nom))');
-      if (dbCategorie != null) qMatchs = qMatchs.eq('categorie', dbCategorie);
-      if (saison != null) qMatchs = qMatchs.eq('saison', saison);
-      final resMatchs = await qMatchs;
+      final resProgs = await _matchRepo.programmations(
+        categorie: categorie,
+        saison: saison,
+      );
+      final resMatchs = await _matchRepo.matchsJoues(
+        categorie: categorie,
+        saison: saison,
+      );
 
       List<MatchEvent> allEvents = [];
 
