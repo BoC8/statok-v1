@@ -1600,8 +1600,61 @@ class _MatchDetailDialogState extends State<MatchDetailDialog> {
   }
 
   Future<void> _supprimerMatch() async {
-    await _client.from('matchs').delete().eq('id', widget.match['id']);
-    if (mounted) Navigator.pop(context);
+    // 1. Confirmation : l'action est irréversible et le bouton est juste
+    //    à côté de "Fermer".
+    final confirme = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Supprimer ce match ?'),
+        content: const Text(
+          'Le match et toutes ses actions (buts, passes décisives, tirs au but) '
+          'seront définitivement supprimés.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+    if (confirme != true) return;
+    if (!mounted) return;
+
+    // On capture messenger et navigator avant les await : après une
+    // opération asynchrone, le context peut ne plus être valide.
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
+    try {
+      // 2. Les actions AVANT le match.
+      //    actions.match_id référence matchs.id ; sans suppression préalable,
+      //    Postgres refuse de supprimer un match qui a des buteurs.
+      await _client.from('actions').delete().eq('match_id', widget.match['id']);
+      await _client.from('matchs').delete().eq('id', widget.match['id']);
+
+      navigator.pop();
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Match supprimé'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      // 3. Ne jamais échouer en silence : avant, la boîte se fermait
+      //    comme si tout allait bien alors que rien n'était supprimé.
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Erreur lors de la suppression : $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   bool _isTabAction(Map<String, dynamic> action) {

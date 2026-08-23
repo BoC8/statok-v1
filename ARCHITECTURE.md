@@ -230,7 +230,7 @@ conventions respectées par le code Dart uniquement.
 
 | Constat | Conséquence |
 |---|---|
-| **Pas de `ON DELETE CASCADE` sur `actions.match_id`** et `_supprimerMatch()` ne supprime pas les actions avant le match | 🐞 **Bug actif** : supprimer un match qui a des buteurs échoue (violation de clé étrangère), sans `try/catch` ni message — la boîte de dialogue se ferme comme si tout allait bien. Voir §8. |
+| ~~Pas de `ON DELETE CASCADE` sur `actions.match_id`~~ | ✅ Corrigé le 23/08/2026 — `docs/migration_cascade_actions.sql`. Voir §8. |
 | `matchs.equipe` / `programmations.equipe` sont du **texte libre** sans FK vers `equipes.nom` | Renommer une équipe casse le lien avec son historique ; une faute de frappe crée une équipe fantôme |
 | Aucun **index** en dehors des clés primaires | `actions.match_id`, `actions.joueur_id`, `matchs.saison`, `matchs.categorie` → scans complets, invisibles aujourd'hui, coûteux à terme |
 | Aucune **unicité** sur `equipes(nom, categorie)` ni `joueurs(nom, categorie_detail)` | Doublons possibles ; le code s'en protège côté Dart uniquement (`ilike` + `maybeSingle`) |
@@ -363,28 +363,36 @@ Correctifs :
 Pour livrer : bouton **Run workflow** dans l'onglet Actions, ou
 `git tag v1.0.3 && git push origin v1.0.3`.
 
-### 🔴 Bug confirmé — suppression d'un match
+### ✅ RÉSOLU — Bug de suppression d'un match (23 août 2026)
 
-`MatchDetailDialog._supprimerMatch()` (`matchs_tab.dart` ~l.1602) fait :
+**Symptôme** : supprimer un match ayant au moins un but ou une passe ne faisait rien.
+La boîte de dialogue se fermait normalement, le match restait en base.
 
-```dart
-Future<void> _supprimerMatch() async {
-  await _client.from('matchs').delete().eq('id', widget.match['id']);
-  if (mounted) Navigator.pop(context);
-}
-```
+**Cause** : `actions.match_id` référence `matchs.id` sans `ON DELETE CASCADE`, et
+`_supprimerMatch()` supprimait le match sans nettoyer ses actions. Postgres refusait —
+mais sans `try/catch`, l'exception passait inaperçue.
 
-Or `actions.match_id` référence `matchs.id` **sans `ON DELETE CASCADE`**. Dès qu'un
-match a au moins un but ou une passe enregistrés, Postgres refuse la suppression. Il n'y
-a ni `try/catch` ni message : la boîte se ferme, le match est toujours là.
+**Correctif, sur les deux plans** (volontairement redondant : si la migration n'est pas
+jouée sur un environnement, le code tient quand même) :
 
-Deux correctifs possibles (les faire tous les deux) :
+1. **Base** — `docs/migration_cascade_actions.sql` : `ON DELETE CASCADE` sur
+   `actions_match_id_fkey`.
+2. **Dart** — `matchs_tab.dart`, `MatchDetailDialog._supprimerMatch()` :
+   - suppression explicite des actions avant le match ;
+   - `try/catch` avec `SnackBar` d'erreur — **ne plus jamais échouer en silence** ;
+   - **boîte de confirmation ajoutée** : le bouton « Supprimer » est collé à « Fermer »
+     dans la même barre, et un seul tap effaçait un match définitivement. Sur un
+     téléphone en bord de terrain, c'est un accident qui attend d'arriver.
+   - `messenger` et `navigator` capturés avant les `await` (règle
+     `use_build_context_synchronously`).
 
-1. **Côté base** — `ALTER TABLE actions DROP CONSTRAINT actions_match_id_fkey,
-   ADD CONSTRAINT actions_match_id_fkey FOREIGN KEY (match_id)
-   REFERENCES matchs(id) ON DELETE CASCADE;`
-2. **Côté Dart** — supprimer les actions d'abord, et entourer d'un `try/catch` avec un
-   `SnackBar` d'erreur (comme le fait déjà `_sauvegarderModifs`).
+La liste se met à jour seule après suppression : elle est branchée sur un
+`StreamBuilder` (flux temps réel Supabase), pas sur un `FutureBuilder`.
+
+**Reste à faire, même famille** : `programmations_tab.dart`,
+`ProgrammationDetailDialog._supprimer()` a le même bouton sans confirmation ni
+`try/catch`. Pas de bug de fond (une programmation n'a pas d'actions liées), mais même
+risque de suppression accidentelle.
 
 ### ✅ RÉSOLU — Row Level Security Supabase (23 août 2026)
 
