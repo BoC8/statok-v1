@@ -1,12 +1,14 @@
 name: "Build iOS IPA"
 
 on:
+  workflow_dispatch:
   push:
-    branches: [ "main" ]
+    tags:
+      - "v*"
 
 jobs:
   build:
-    runs-on: macos-latest-large
+    runs-on: macos-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -31,11 +33,17 @@ jobs:
           security import certificate.p12 -k build.keychain -P "${{ secrets.P12_PASSWORD }}" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${{ secrets.KEYCHAIN_PASSWORD }}" build.keychain
 
+      - name: Calculer le numéro de build
+        id: buildnum
+        run: echo "number=$(( ${{ github.run_number }} + 100 ))" >> $GITHUB_OUTPUT
+
       - name: Flutter Build IPA
         run: |
           flutter pub get
+          echo "Numéro de build : ${{ steps.buildnum.outputs.number }}"
           # 1. On crée l'archive (le .app) sans vérifier les certificats locaux
-          flutter build ipa --release --no-codesign
+          flutter build ipa --release --no-codesign \
+            --build-number=${{ steps.buildnum.outputs.number }}
           
           # 2. On transforme l'archive en vrai .ipa SIGNÉ via xcodebuild
           xcodebuild -exportArchive \
