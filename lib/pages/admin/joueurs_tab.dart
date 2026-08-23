@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/joueur_model.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/categorie_utils.dart';
 
 class JoueursTab extends StatefulWidget {
   final String categorie;
@@ -28,55 +29,13 @@ class _JoueursTabState extends State<JoueursTab> {
     }
   }
 
-  List<String> _detailsPourCategorie() {
-    switch (widget.categorie) {
-      case 'U14 - U15':
-        return ['14', '15'];
-      case 'U16 - U17 - U18':
-        return ['16', '17', '18'];
-      case 'SENIORS':
-      case 'Seniors':
-        return ['Senior'];
-      default:
-        return ['14', '15', '16', '17', '18', 'Senior'];
-    }
-  }
-
-  String? _categoriePourDetail(String? detail) {
-    switch (detail) {
-      case '14':
-      case '15':
-        return 'U14-15';
-      case '16':
-      case '17':
-      case '18':
-        return 'U16-17-18';
-      case 'Senior':
-        return 'Seniors';
-    }
-    return null;
-  }
-
-  String? _categoriePourDb(String? categorie) {
-    switch (categorie) {
-      case 'U14 - U15':
-        return 'U14-15';
-      case 'U16 - U17 - U18':
-        return 'U16-17-18';
-      case 'SENIORS':
-      case 'Seniors':
-        return 'Seniors';
-    }
-    return categorie;
-  }
-
   bool _joueurDansCategorie(Map<String, dynamic> joueur) {
-    final details = _detailsPourCategorie();
+    final details = detailsAffichesPourCategorie(widget.categorie);
     final detail = joueur['categorie_detail']?.toString();
     if (detail != null && details.contains(detail)) return true;
 
     final dbCategorie = joueur['categorie']?.toString();
-    final selectedDbCategorie = _categoriePourDb(widget.categorie);
+    final selectedDbCategorie = categoriePourDb(widget.categorie);
     return dbCategorie == widget.categorie ||
         dbCategorie == selectedDbCategorie;
   }
@@ -122,7 +81,7 @@ class _JoueursTabState extends State<JoueursTab> {
         'nom': nom.trim(),
         'genre': genre,
         'categorie_detail': categorieDetail,
-        'categorie': _categoriePourDetail(categorieDetail),
+        'categorie': categoriePourDetail(categorieDetail),
         'actif': true,
       });
       if (mounted) {
@@ -210,7 +169,7 @@ class _JoueursTabState extends State<JoueursTab> {
             'nom': nom.trim(),
             'genre': genre,
             'categorie_detail': categorieDetail,
-            'categorie': _categoriePourDetail(categorieDetail),
+            'categorie': categoriePourDetail(categorieDetail),
           })
           .eq('id', id);
       if (mounted) Navigator.pop(context);
@@ -227,7 +186,7 @@ class _JoueursTabState extends State<JoueursTab> {
     showDialog(
       context: context,
       builder: (context) => _JoueurFormDialog(
-        categorieDetails: _detailsPourCategorie(),
+        categorieDetails: detailsAffichesPourCategorie(widget.categorie),
         onSave: _ajouterJoueur,
       ),
     );
@@ -240,7 +199,7 @@ class _JoueursTabState extends State<JoueursTab> {
       builder: (context) {
         return _JoueurDetailDialog(
           joueur: joueur,
-          categorieDetails: _detailsPourCategorie(),
+          categorieDetails: detailsAffichesPourCategorie(widget.categorie),
           onDelete: () => _desactiverJoueur(joueur),
           onSave: (nom, genre, categorieDetail) =>
               _modifierJoueur(joueur.id, nom, genre, categorieDetail),
@@ -262,10 +221,10 @@ class _JoueursTabState extends State<JoueursTab> {
               Expanded(child: _buildGenreCard('F', 'Joueuses')),
             ],
           ),
-          if (_detailsPourCategorie().length > 1) ...[
+          if (detailsAffichesPourCategorie(widget.categorie).length > 1) ...[
             const SizedBox(height: 8),
             Row(
-              children: _detailsPourCategorie()
+              children: detailsAffichesPourCategorie(widget.categorie)
                   .map(
                     (detail) => Expanded(
                       child: Padding(

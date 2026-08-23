@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/equipe_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/categorie_utils.dart';
 
 class EquipesAdminTab extends StatefulWidget {
   final String categorie;
@@ -185,38 +186,6 @@ class _EquipesAdminTabState extends State<EquipesAdminTab> {
     }
   }
 
-  String _categoriePourDetail(String detail) {
-    switch (detail) {
-      case '14':
-      case '15':
-        return 'U14-15';
-      case '16':
-      case '17':
-      case '18':
-        return 'U16-17-18';
-      case 'Senior':
-      default:
-        return 'Seniors';
-    }
-  }
-
-  String? _detailSuivant(String? detail) {
-    switch (detail) {
-      case '14':
-        return '15';
-      case '15':
-        return '16';
-      case '16':
-        return '17';
-      case '17':
-        return '18';
-      case '18':
-        return 'Senior';
-      default:
-        return null;
-    }
-  }
-
   Future<void> _monterJoueursCategorie() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -254,13 +223,13 @@ class _EquipesAdminTabState extends State<EquipesAdminTab> {
 
       var updated = 0;
       for (final joueur in joueurs) {
-        final next = _detailSuivant(joueur['categorie_detail']?.toString());
+        final next = detailSuivant(joueur['categorie_detail']?.toString());
         if (next == null) continue;
         await _client
             .from('joueurs')
             .update({
               'categorie_detail': next,
-              'categorie': _categoriePourDetail(next),
+              'categorie': categoriePourDetail(next) ?? 'Seniors',
             })
             .eq('id', joueur['id']);
         updated++;

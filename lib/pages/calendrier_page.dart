@@ -1,10 +1,12 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../theme/app_theme.dart';
 import '../widgets/compact_filter_button.dart';
+
+import '../utils/categorie_utils.dart';
 
 // --- MODÈLES DE DONNÉES ---
 class TabTireur {
@@ -103,7 +105,7 @@ class _CalendrierPageState extends State<CalendrierPage> {
       final saison = prefs.getString('selected_season');
       // Filtrage CÔTÉ SERVEUR : seules les lignes de la catégorie et de la
       // saison affichées sont téléchargées.
-      final dbCategorie = _categoriePourDb(categorie);
+      final dbCategorie = categoriePourDb(categorie);
 
       var qProgs = _client.from('programmations').select('*, adversaires(nom)');
       if (dbCategorie != null) qProgs = qProgs.eq('categorie', dbCategorie);
@@ -243,19 +245,6 @@ class _CalendrierPageState extends State<CalendrierPage> {
   List<MatchEvent> _getEventsForDay(DateTime day) {
     final key = DateTime(day.year, day.month, day.day);
     return _events[key] ?? [];
-  }
-
-  String? _categoriePourDb(String? categorie) {
-    switch (categorie) {
-      case 'U14 - U15':
-        return 'U14-15';
-      case 'U16 - U17 - U18':
-        return 'U16-17-18';
-      case 'SENIORS':
-      case 'Seniors':
-        return 'Seniors';
-    }
-    return categorie;
   }
 
   String _nomAdversaire(Map<String, dynamic> row) {

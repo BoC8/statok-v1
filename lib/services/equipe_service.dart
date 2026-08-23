@@ -1,28 +1,19 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../utils/categorie_utils.dart' as cat;
+
 class EquipeService {
   EquipeService(this._client);
 
   final SupabaseClient _client;
 
-  String? categoriePourDb(String? categorie) {
-    switch (categorie) {
-      case 'U14 - U15':
-        return 'U14-15';
-      case 'U16 - U17 - U18':
-        return 'U16-17-18';
-      case 'SENIORS':
-      case 'Seniors':
-        return 'Seniors';
-    }
-    return categorie;
-  }
+  // Ces deux méthodes restent exposées pour ne pas casser les appelants
+  // (equipes_admin_tab notamment). L'implémentation vit désormais dans
+  // utils/categorie_utils.dart, en un seul exemplaire.
+  String? categoriePourDb(String? categorie) => cat.categoriePourDb(categorie);
 
-  bool categorieMatches(String? selected, dynamic dbValue) {
-    if (selected == null) return true;
-    final db = dbValue?.toString();
-    return db == selected || db == categoriePourDb(selected);
-  }
+  bool categorieMatches(String? selected, dynamic dbValue) =>
+      cat.categorieMatches(selected, dbValue);
 
   Future<List<String>> chargerEquipes({
     required String? categorie,

@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../widgets/compact_filter_button.dart';
 
+import '../utils/categorie_utils.dart';
+
 // Modèle pour les stats d'un joueur
 class PlayerStats {
   final String name;
@@ -67,7 +69,7 @@ class _StatsPageState extends State<StatsPage> {
       // 2. Récupérer les actions avec les infos du match lié.
       // Filtrage CÔTÉ SERVEUR via la table liée. Le "!inner" rend la jointure
       // obligatoire, ce qui autorise à filtrer sur les colonnes de matchs.
-      final dbCategorie = _categoriePourDb(categorie);
+      final dbCategorie = categoriePourDb(categorie);
 
       var qActions = _client
           .from('actions')
@@ -206,19 +208,6 @@ class _StatsPageState extends State<StatsPage> {
     if (compet.contains('Coupe')) return AppTheme.dore;
     if (compet.contains('Amical')) return Colors.grey;
     return AppTheme.bleuMarine;
-  }
-
-  String? _categoriePourDb(String? categorie) {
-    switch (categorie) {
-      case 'U14 - U15':
-        return 'U14-15';
-      case 'U16 - U17 - U18':
-        return 'U16-17-18';
-      case 'SENIORS':
-      case 'Seniors':
-        return 'Seniors';
-    }
-    return categorie;
   }
 
   String _lieuCode(dynamic lieu) {

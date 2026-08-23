@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../services/equipe_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/categorie_utils.dart';
 
 class ProgrammationsTab extends StatefulWidget {
   final String selectedSeason;
@@ -129,23 +130,6 @@ class _ProgrammationsTabState extends State<ProgrammationsTab> {
     }
   }
 
-  String? _categoriePourDb(String? categorie) {
-    switch (categorie) {
-      case 'U14 - U15':
-        return 'U14-15';
-      case 'U16 - U17 - U18':
-        return 'U16-17-18';
-      case 'SENIORS':
-        return 'Seniors';
-    }
-    return categorie;
-  }
-
-  bool _categorieMatches(dynamic dbValue) {
-    final db = dbValue?.toString();
-    return db == widget.categorie || db == _categoriePourDb(widget.categorie);
-  }
-
   Future<String?> _ensureAdversaire(String nom) async {
     final clean = nom.trim();
     if (clean.isEmpty) return null;
@@ -181,7 +165,7 @@ class _ProgrammationsTabState extends State<ProgrammationsTab> {
         'adversaire_id': adversaireId,
         'lieu': _lieu,
         'competition': _competition,
-        'categorie': _categoriePourDb(widget.categorie),
+        'categorie': categoriePourDb(widget.categorie),
         'saison': widget.selectedSeason,
       };
 
@@ -557,7 +541,7 @@ class _ProgrammationsTabState extends State<ProgrammationsTab> {
               }
 
               var progs = snapshot.data!
-                  .where((m) => _categorieMatches(m['categorie']))
+                  .where((m) => categorieMatches(widget.categorie, m['categorie']))
                   .where((m) => m['saison'] == widget.selectedSeason)
                   .toList();
 

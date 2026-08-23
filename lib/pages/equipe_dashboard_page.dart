@@ -6,6 +6,8 @@ import 'package:fl_chart/fl_chart.dart';
 import '../theme/app_theme.dart';
 import '../widgets/compact_filter_button.dart';
 
+import '../utils/categorie_utils.dart';
+
 class EquipeDashboardPage extends StatefulWidget {
   final String equipeName;
 
@@ -40,7 +42,7 @@ class _EquipeDashboardPageState extends State<EquipeDashboardPage> {
       final saison = prefs.getString('selected_season');
 
       // Filtrage CÔTÉ SERVEUR : catégorie et saison en plus de l'équipe.
-      final dbCategorie = _categoriePourDb(categorie);
+      final dbCategorie = categoriePourDb(categorie);
 
       var qMatches = _client
           .from('matchs')
@@ -181,19 +183,6 @@ class _EquipeDashboardPageState extends State<EquipeDashboardPage> {
         color: isFcpb ? AppTheme.bleuMarine : Colors.black87,
       ),
     );
-  }
-
-  String? _categoriePourDb(String? categorie) {
-    switch (categorie) {
-      case 'U14 - U15':
-        return 'U14-15';
-      case 'U16 - U17 - U18':
-        return 'U16-17-18';
-      case 'SENIORS':
-      case 'Seniors':
-        return 'Seniors';
-    }
-    return categorie;
   }
 
   Map<String, int> _getGlobalStats(List<Map<String, dynamic>> matches) {

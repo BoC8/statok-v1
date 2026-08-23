@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../models/joueur_model.dart';
 import '../../services/equipe_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/categorie_utils.dart';
 
 class MatchsTab extends StatefulWidget {
   final String selectedSeason;
@@ -156,9 +157,9 @@ class _MatchsTabState extends State<MatchsTab> {
       return {
         for (final row in data)
           if (row['nom'] != null &&
-              _categorieMatches(row['categorie']) &&
+              categorieMatches(widget.categorie, row['categorie']) &&
               row['genre'] != null)
-            row['nom'].toString(): _normaliserGenre(row['genre']),
+            row['nom'].toString(): normaliserGenre(row['genre']),
       };
     } catch (_) {
       return {};
@@ -183,28 +184,6 @@ class _MatchsTabState extends State<MatchsTab> {
     }
   }
 
-  String? _categoriePourDb(String? categorie) {
-    switch (categorie) {
-      case 'U14 - U15':
-        return 'U14-15';
-      case 'U16 - U17 - U18':
-        return 'U16-17-18';
-      case 'SENIORS':
-        return 'Seniors';
-    }
-    return categorie;
-  }
-
-  bool _categorieMatches(dynamic dbValue) {
-    final db = dbValue?.toString();
-    return db == widget.categorie || db == _categoriePourDb(widget.categorie);
-  }
-
-  String _normaliserGenre(dynamic value) {
-    final upper = value?.toString().trim().toUpperCase() ?? '';
-    return upper.startsWith('F') ? 'F' : 'M';
-  }
-
   String _genreEquipeDepuisDb(String equipe) {
     final dbGenre = _genresEquipes[equipe];
     if (dbGenre != null) return dbGenre;
@@ -218,24 +197,8 @@ class _MatchsTabState extends State<MatchsTab> {
     return 'M';
   }
 
-  Set<String> _detailsPourCategorie(String? categorie) {
-    switch (categorie) {
-      case 'U14 - U15':
-      case 'U14-15':
-        return {'14', '15'};
-      case 'U16 - U17 - U18':
-      case 'U16-17-18':
-        return {'16', '17', '18'};
-      case 'SENIORS':
-      case 'Seniors':
-        return {'Senior'};
-      default:
-        return {};
-    }
-  }
-
   List<JoueurModel> _joueursEligiblesPourEquipe(String equipe) {
-    final details = _detailsPourCategorie(widget.categorie);
+    final details = detailsPourCategorie(widget.categorie);
     final genre = _genreEquipeDepuisDb(equipe);
     return _tousLesJoueurs.where((joueur) {
       final joueurGenre = (joueur.genre ?? 'M').toUpperCase();
@@ -412,7 +375,7 @@ class _MatchsTabState extends State<MatchsTab> {
           'tab_fcpb': int.parse(_tabFcpbCtrl.text),
         if (_isCoupe && _tabAdvCtrl.text.trim().isNotEmpty)
           'tab_adv': int.parse(_tabAdvCtrl.text),
-        'categorie': _categoriePourDb(widget.categorie),
+        'categorie': categoriePourDb(widget.categorie),
         'saison': widget.selectedSeason,
       };
 
@@ -979,7 +942,7 @@ class _MatchsTabState extends State<MatchsTab> {
               }
 
               var matchs = snapshot.data!
-                  .where((m) => _categorieMatches(m['categorie']))
+                  .where((m) => categorieMatches(widget.categorie, m['categorie']))
                   .where((m) => m['saison'] == widget.selectedSeason)
                   .toList();
 
@@ -1681,25 +1644,9 @@ class _MatchDetailDialogState extends State<MatchDetailDialog> {
     return 'M';
   }
 
-  Set<String> _detailsPourCategorie(String? categorie) {
-    switch (categorie) {
-      case 'U14 - U15':
-      case 'U14-15':
-        return {'14', '15'};
-      case 'U16 - U17 - U18':
-      case 'U16-17-18':
-        return {'16', '17', '18'};
-      case 'SENIORS':
-      case 'Seniors':
-        return {'Senior'};
-      default:
-        return {};
-    }
-  }
-
   List<JoueurModel> get _joueursEligibles {
     final equipe = widget.match['equipe']?.toString() ?? '';
-    final details = _detailsPourCategorie(
+    final details = detailsPourCategorie(
       widget.match['categorie']?.toString(),
     );
     final genre = _genreEquipeDepuisDb(equipe);

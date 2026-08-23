@@ -1,9 +1,11 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
 import '../widgets/compact_filter_button.dart';
+
+import '../utils/categorie_utils.dart';
 
 // Modèle spécifique pour les Résultats
 class TabTireur {
@@ -89,7 +91,7 @@ class _ResultatsPageState extends State<ResultatsPage> {
       // Filtrage CÔTÉ SERVEUR : on ne télécharge que les matchs de la
       // catégorie et de la saison affichées, au lieu de rapatrier toute la
       // table pour en jeter la majorité en Dart.
-      final dbCategorie = _categoriePourDb(categorie);
+      final dbCategorie = categoriePourDb(categorie);
 
       var query = _client
           .from('matchs')
@@ -189,19 +191,6 @@ class _ResultatsPageState extends State<ResultatsPage> {
       return nomDirect.toString();
     }
     return 'Adversaire';
-  }
-
-  String? _categoriePourDb(String? categorie) {
-    switch (categorie) {
-      case 'U14 - U15':
-        return 'U14-15';
-      case 'U16 - U17 - U18':
-        return 'U16-17-18';
-      case 'SENIORS':
-      case 'Seniors':
-        return 'Seniors';
-    }
-    return categorie;
   }
 
   List<String> _valeursUniques(Iterable<String> values) {
