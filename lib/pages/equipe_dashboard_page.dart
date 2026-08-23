@@ -1,24 +1,23 @@
 ﻿import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../theme/app_theme.dart';
 import '../widgets/compact_filter_button.dart';
-import '../repositories/match_repository.dart';
+import '../providers/app_providers.dart';
+import '../providers/match_provider.dart';
 
-class EquipeDashboardPage extends StatefulWidget {
+class EquipeDashboardPage extends ConsumerStatefulWidget {
   final String equipeName;
 
   const EquipeDashboardPage({super.key, required this.equipeName});
 
   @override
-  State<EquipeDashboardPage> createState() => _EquipeDashboardPageState();
+  ConsumerState<EquipeDashboardPage> createState() =>
+      _EquipeDashboardPageState();
 }
 
-class _EquipeDashboardPageState extends State<EquipeDashboardPage> {
-  final MatchRepository _matchRepo = MatchRepository();
-
-  bool _isLoading = true;
+class _EquipeDashboardPageState extends ConsumerState<EquipeDashboardPage> {
   List<Map<String, dynamic>> _allMatches = [];
   List<Map<String, dynamic>> _allProgrammations = [];
   String? _selectedSeason;
@@ -28,49 +27,22 @@ class _EquipeDashboardPageState extends State<EquipeDashboardPage> {
   List<String> _listeCompet = [];
 
   @override
-  void initState() {
-    super.initState();
-    _chargerDonnees();
-  }
-
-  Future<void> _chargerDonnees() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final categorie = prefs.getString('selected_category');
-      final saison = prefs.getString('selected_season');
-
-      final resMatches = await _matchRepo.matchsDeLEquipe(
-        widget.equipeName,
-        categorie: categorie,
-        saison: saison,
-      );
-      final resProg = await _matchRepo.prochainesProgrammations(
-        widget.equipeName,
-        categorie: categorie,
-        saison: saison,
-      );
-
-      final filteredMatches = List<Map<String, dynamic>>.from(resMatches);
-      final filteredProgs = List<Map<String, dynamic>>.from(resProg);
-
-      if (mounted) {
-        setState(() {
-          _allMatches = filteredMatches;
-          _allProgrammations = filteredProgs;
-          _listeCompet = _valeursUniques([
-            ...filteredMatches.map((m) => m['competition']?.toString() ?? ''),
-            ...filteredProgs.map((p) => p['competition']?.toString() ?? ''),
-          ]);
-          _filtresCompet = _filtresCompet.intersection(_listeCompet.toSet());
-          _filtresLieux = _filtresLieux.intersection({'DOM', 'EXT'});
-          _selectedSeason = saison;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      print("Erreur: $e");
-      setState(() => _isLoading = false);
-    }
+  /// Dérive l'état d'affichage des données fournies par les providers.
+  /// Appelée depuis `build`, donc sans `setState`.
+  void _preparer(
+    List<Map<String, dynamic>> resMatches,
+    List<Map<String, dynamic>> resProg,
+    String? saison,
+  ) {
+    _allMatches = List<Map<String, dynamic>>.from(resMatches);
+    _allProgrammations = List<Map<String, dynamic>>.from(resProg);
+    _listeCompet = _valeursUniques([
+      ..._allMatches.map((m) => m['competition']?.toString() ?? ''),
+      ..._allProgrammations.map((p) => p['competition']?.toString() ?? ''),
+    ]);
+    _filtresCompet = _filtresCompet.intersection(_listeCompet.toSet());
+    _filtresLieux = _filtresLieux.intersection({'DOM', 'EXT'});
+    _selectedSeason = saison;
   }
 
   String _formatHeure(String? heure) {
@@ -196,37 +168,43 @@ class _EquipeDashboardPageState extends State<EquipeDashboardPage> {
 
     int totalMatchesPlayed = matches.length;
 
-    // --- 0. FONCTIONS UTILITAIRES (Basées exclusivement sur les scores) ---
+    // --- 0. FONCTIONS UTILITAIRES ---
+    //
+    // RÈGLE : le résultat d'un match se lit sur le SCORE SEUL. Un match gagné
+    // aux tirs au but reste un nul au bilan — le TAB ne décide que de la
+    // qualification. C'est déjà ce que font les compteurs V/N/D
+    // (`_getGlobalStats`), les cartes de résultat, la page Résultats et le
+    // Calendrier : partout ailleurs le TAB n'est qu'un badge d'affichage.
+    //
+    // CORRIGÉ LE 23/08/2026
+    //   Cette fonction était la SEULE de l'app à compter un TAB gagné comme
+    //   une victoire. Elle contredisait donc les compteurs affichés juste
+    //   au-dessus d'elle : deux nuls en coupe pour ouvrir la saison donnaient
+    //   « 0 défaite, 100 % de victoires » et la phrase « La saison démarre
+    //   fort », pendant que le bilan affichait « 2 nuls ».
+    //
+    //   Au passage, un nul avec un score de TAB à égalité (2-2 par exemple)
+    //   n'était ni une victoire, ni une défaite, ni un nul : le match
+    //   disparaissait de toutes les séries.
     bool isWin(Map<String, dynamic> m) {
-      if (m['buts_gjpb'] == null || m['buts_adv'] == null) return false;
-      if (m['buts_gjpb'] > m['buts_adv']) return true;
-      if (m['buts_gjpb'] == m['buts_adv'] &&
-          m['tab_fcpb'] != null &&
-          m['tab_adv'] != null) {
-        return m['tab_fcpb'] > m['tab_adv'];
-      }
-      return false;
+      final fcpb = m['buts_gjpb'];
+      final adv = m['buts_adv'];
+      if (fcpb == null || adv == null) return false;
+      return fcpb > adv;
     }
 
     bool isDefeat(Map<String, dynamic> m) {
-      if (m['buts_gjpb'] == null || m['buts_adv'] == null) return false;
-      if (m['buts_gjpb'] < m['buts_adv']) return true;
-      if (m['buts_gjpb'] == m['buts_adv'] &&
-          m['tab_fcpb'] != null &&
-          m['tab_adv'] != null) {
-        return m['tab_fcpb'] < m['tab_adv'];
-      }
-      return false;
+      final fcpb = m['buts_gjpb'];
+      final adv = m['buts_adv'];
+      if (fcpb == null || adv == null) return false;
+      return fcpb < adv;
     }
 
     bool isDraw(Map<String, dynamic> m) {
-      if (m['buts_gjpb'] == null || m['buts_adv'] == null) return false;
-      if (m['buts_gjpb'] == m['buts_adv']) {
-        if (m['tab_fcpb'] == null || m['tab_adv'] == null) {
-          return true;
-        }
-      }
-      return false;
+      final fcpb = m['buts_gjpb'];
+      final adv = m['buts_adv'];
+      if (fcpb == null || adv == null) return false;
+      return fcpb == adv;
     }
 
     // --- 1. CALCULS PRÉLIMINAIRES ---
@@ -310,9 +288,17 @@ class _EquipeDashboardPageState extends State<EquipeDashboardPage> {
       int earlyDraws = matches.where((m) => isDraw(m)).length;
       int earlyDefeats = matches.where((m) => isDefeat(m)).length;
 
-      // Enchaînement sans défaite avec au moins 50% de victoires
-      if (earlyDefeats == 0 && (earlyWins / totalMatchesPlayed) >= 0.5) {
+      // Au moins une victoire, aucune défaite, et 50 % de victoires minimum.
+      // La condition « earlyWins >= 1 » est explicite : sans elle, un début de
+      // saison sans le moindre but marqué pourrait passer pour un bon départ.
+      if (earlyDefeats == 0 &&
+          earlyWins >= 1 &&
+          (earlyWins / totalMatchesPlayed) >= 0.5) {
         return "🚀 La saison démarre fort !";
+      }
+      // Que des nuls depuis le coup d'envoi de la saison
+      else if (totalMatchesPlayed >= 2 && earlyDraws == totalMatchesPlayed) {
+        return "🧱 $earlyDraws nuls pour commencer : solides, mais il faudra gagner";
       }
       // Exactement 1 Victoire et 2 Nuls (sur 3 matchs)
       else if (earlyWins == 1 && earlyDraws == 2) {
@@ -410,8 +396,41 @@ class _EquipeDashboardPageState extends State<EquipeDashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading)
+    // `family` : chaque équipe a son propre cache.
+    final matchsAsync = ref.watch(matchsEquipeProvider(widget.equipeName));
+    final progAsync = ref.watch(prochainesEquipeProvider(widget.equipeName));
+    final contexteAsync = ref.watch(contexteProvider);
+
+    if (matchsAsync.isLoading || progAsync.isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final erreur = matchsAsync.error ?? progAsync.error;
+    if (erreur != null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(widget.equipeName),
+          backgroundColor: AppTheme.bleuMarine,
+          foregroundColor: Colors.white,
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              'Impossible de charger cette équipe.\n$erreur',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.red),
+            ),
+          ),
+        ),
+      );
+    }
+
+    _preparer(
+      matchsAsync.value ?? const [],
+      progAsync.value ?? const [],
+      contexteAsync.value?.saison,
+    );
 
     final matches = _filteredMatches();
     final programmations = _filteredProgrammations();

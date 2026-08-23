@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../theme/app_theme.dart';
 import '../widgets/compact_filter_button.dart';
-import '../repositories/match_repository.dart';
+import '../providers/match_provider.dart';
 
 // --- MODÈLES DE DONNÉES ---
 class TabTireur {
@@ -54,15 +54,14 @@ class MatchEvent {
   bool get hasTab => tabFcpb != null && tabAdv != null;
 }
 
-class CalendrierPage extends StatefulWidget {
+class CalendrierPage extends ConsumerStatefulWidget {
   const CalendrierPage({super.key});
 
   @override
-  State<CalendrierPage> createState() => _CalendrierPageState();
+  ConsumerState<CalendrierPage> createState() => _CalendrierPageState();
 }
 
-class _CalendrierPageState extends State<CalendrierPage> {
-  final MatchRepository _matchRepo = MatchRepository();
+class _CalendrierPageState extends ConsumerState<CalendrierPage> {
   final ScrollController _scrollController = ScrollController();
 
   // Calendrier
@@ -75,7 +74,6 @@ class _CalendrierPageState extends State<CalendrierPage> {
   Map<DateTime, List<MatchEvent>> _events = {};
   List<MatchEvent> _selectedDayEvents = [];
   List<MatchEvent> _nextMatches = [];
-  bool _isLoading = true;
 
   // Filtres
   Set<String> _filtresEquipes = {};
@@ -93,88 +91,77 @@ class _CalendrierPageState extends State<CalendrierPage> {
   void initState() {
     super.initState();
     _selectedDay = _focusedDay;
-    _chargerDonnees();
   }
 
-  Future<void> _chargerDonnees() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final categorie = prefs.getString('selected_category');
-      final saison = prefs.getString('selected_season');
-      final resProgs = await _matchRepo.programmations(
-        categorie: categorie,
-        saison: saison,
+  /// Convertit les lignes brutes en événements de calendrier.
+  ///
+  /// Appelée depuis `build` quand les deux providers ont répondu. N'appelle pas
+  /// `setState` — voir la note identique dans `resultats_page.dart`.
+  void _preparer(
+    List<Map<String, dynamic>> resProgs,
+    List<Map<String, dynamic>> resMatchs,
+  ) {
+    List<MatchEvent> allEvents = [];
+
+    // Programmations
+    for (var p in resProgs) {
+      allEvents.add(
+        MatchEvent(
+          id: p['id'].toString(),
+          date: DateTime.parse(p['date']),
+          equipe: p['equipe'] ?? '',
+          adversaire: _nomAdversaire(p),
+          competition: p['competition'] ?? 'Championnat',
+          lieu: p['lieu'] ?? '',
+          isPlayed: false,
+          heure: p['heure'],
+        ),
       );
-      final resMatchs = await _matchRepo.matchsJoues(
-        categorie: categorie,
-        saison: saison,
-      );
+    }
 
-      List<MatchEvent> allEvents = [];
+    // Matchs Joués
+    for (var m in resMatchs) {
+      List<String> goals = [];
+      List<String> assists = [];
+      List<TabTireur> tabTireurs = [];
 
-      // Programmations
-      for (var p in resProgs) {
-        allEvents.add(
-          MatchEvent(
-            id: p['id'].toString(),
-            date: DateTime.parse(p['date']),
-            equipe: p['equipe'] ?? '',
-            adversaire: _nomAdversaire(p),
-            competition: p['competition'] ?? 'Championnat',
-            lieu: p['lieu'] ?? '',
-            isPlayed: false,
-            heure: p['heure'],
-          ),
-        );
-      }
-
-      // Matchs Joués
-      for (var m in resMatchs) {
-        List<String> goals = [];
-        List<String> assists = [];
-        List<TabTireur> tabTireurs = [];
-
-        if (m['actions'] != null) {
-          for (var action in m['actions']) {
-            final nom = action['joueurs']?['nom'] ?? 'Inconnu';
-            if (action['type'] == 'Goal') {
-              goals.add(nom);
-            } else if (action['type'] == 'Assist') {
-              assists.add(nom);
-            } else if (action['type'] == 'TAB_Reussi') {
-              tabTireurs.add(TabTireur(nom: nom, reussi: true));
-            } else if (action['type'] == 'TAB_Rate') {
-              tabTireurs.add(TabTireur(nom: nom, reussi: false));
-            }
+      if (m['actions'] != null) {
+        for (var action in m['actions']) {
+          final nom = action['joueurs']?['nom'] ?? 'Inconnu';
+          if (action['type'] == 'Goal') {
+            goals.add(nom);
+          } else if (action['type'] == 'Assist') {
+            assists.add(nom);
+          } else if (action['type'] == 'TAB_Reussi') {
+            tabTireurs.add(TabTireur(nom: nom, reussi: true));
+          } else if (action['type'] == 'TAB_Rate') {
+            tabTireurs.add(TabTireur(nom: nom, reussi: false));
           }
         }
-
-        allEvents.add(
-          MatchEvent(
-            id: m['id'].toString(),
-            date: DateTime.parse(m['date']),
-            equipe: m['equipe'] ?? '',
-            adversaire: _nomAdversaire(m),
-            competition: m['competition'] ?? 'Championnat',
-            lieu: m['lieu'] ?? '',
-            isPlayed: true,
-            butsGjpb: m['buts_gjpb'],
-            butsAdv: m['buts_adv'],
-            tabFcpb: int.tryParse(m['tab_fcpb']?.toString() ?? ''),
-            tabAdv: int.tryParse(m['tab_adv']?.toString() ?? ''),
-            buteurs: goals,
-            passeurs: assists,
-            tabTireurs: tabTireurs,
-          ),
-        );
       }
 
-      _allEvents = allEvents;
-      _organiserDonnees(_allEvents);
-    } catch (e) {
-      print("Erreur chargement: $e");
-      setState(() => _isLoading = false);
+      allEvents.add(
+        MatchEvent(
+          id: m['id'].toString(),
+          date: DateTime.parse(m['date']),
+          equipe: m['equipe'] ?? '',
+          adversaire: _nomAdversaire(m),
+          competition: m['competition'] ?? 'Championnat',
+          lieu: m['lieu'] ?? '',
+          isPlayed: true,
+          butsGjpb: m['buts_gjpb'],
+          butsAdv: m['buts_adv'],
+          tabFcpb: int.tryParse(m['tab_fcpb']?.toString() ?? ''),
+          tabAdv: int.tryParse(m['tab_adv']?.toString() ?? ''),
+          buteurs: goals,
+          passeurs: assists,
+          tabTireurs: tabTireurs,
+        ),
+      );
     }
+
+    _allEvents = allEvents;
+    _organiserDonnees(_allEvents);
   }
 
   void _organiserDonnees(List<MatchEvent> rawList) {
@@ -220,17 +207,14 @@ class _CalendrierPageState extends State<CalendrierPage> {
     futures.sort((a, b) => a.date.compareTo(b.date));
     List<MatchEvent> nextBanner = futures.take(5).toList();
 
-    setState(() {
-      _listeEquipes = equipes;
-      _listeCompet = competitions;
-      _listeAdversaires = adversaires;
-      _events = eventsMap;
-      _nextMatches = nextBanner;
-      if (_selectedDay != null) {
-        _selectedDayEvents = _getEventsForDay(_selectedDay!);
-      }
-      _isLoading = false;
-    });
+    _listeEquipes = equipes;
+    _listeCompet = competitions;
+    _listeAdversaires = adversaires;
+    _events = eventsMap;
+    _nextMatches = nextBanner;
+    if (_selectedDay != null) {
+      _selectedDayEvents = _getEventsForDay(_selectedDay!);
+    }
   }
 
   List<MatchEvent> _getEventsForDay(DateTime day) {
@@ -374,6 +358,18 @@ class _CalendrierPageState extends State<CalendrierPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Deux sources : les matchs à venir et les matchs joués. On attend que les
+    // deux aient répondu avant de composer le calendrier.
+    final progsAsync = ref.watch(programmationsProvider);
+    final matchsAsync = ref.watch(matchsJouesProvider);
+
+    final chargement = progsAsync.isLoading || matchsAsync.isLoading;
+    final erreur = progsAsync.error ?? matchsAsync.error;
+
+    if (progsAsync.hasValue && matchsAsync.hasValue) {
+      _preparer(progsAsync.value!, matchsAsync.value!);
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('CALENDRIER'),
@@ -382,8 +378,19 @@ class _CalendrierPageState extends State<CalendrierPage> {
         centerTitle: true,
       ),
       backgroundColor: Colors.grey[50],
-      body: _isLoading
+      body: chargement
           ? const Center(child: CircularProgressIndicator())
+          : erreur != null
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'Impossible de charger le calendrier.\n$erreur',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.red),
+                ),
+              ),
+            )
           : CustomScrollView(
               controller: _scrollController,
               slivers: [
@@ -397,17 +404,21 @@ class _CalendrierPageState extends State<CalendrierPage> {
                     selectedLieux: _filtresLieux,
                     competitionColor: _getColorForCompet,
                     onApply: (equipes, competitions, lieux) {
-                      _filtresEquipes = equipes;
-                      _filtresCompet = competitions;
-                      _filtresLieux = lieux;
-                      _organiserDonnees(_allEvents);
+                      setState(() {
+                        _filtresEquipes = equipes;
+                        _filtresCompet = competitions;
+                        _filtresLieux = lieux;
+                        _organiserDonnees(_allEvents);
+                      });
                     },
                     trailing: AdversaireSearchField(
                       value: _filtreAdversaire,
                       adversaires: _listeAdversaires,
                       onChanged: (value) {
-                        _filtreAdversaire = value;
-                        _organiserDonnees(_allEvents);
+                        setState(() {
+                          _filtreAdversaire = value;
+                          _organiserDonnees(_allEvents);
+                        });
                       },
                     ),
                   ),

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/app_theme.dart';
 import '../widgets/compact_filter_button.dart';
-import '../repositories/stats_repository.dart';
+import '../providers/match_provider.dart';
 
 // Modèle pour les stats d'un joueur
 class PlayerStats {
@@ -19,19 +19,17 @@ class PlayerStats {
   });
 }
 
-class StatsPage extends StatefulWidget {
+class StatsPage extends ConsumerStatefulWidget {
   const StatsPage({super.key});
 
   @override
-  State<StatsPage> createState() => _StatsPageState();
+  ConsumerState<StatsPage> createState() => _StatsPageState();
 }
 
-class _StatsPageState extends State<StatsPage> {
-  final StatsRepository _statsRepo = StatsRepository();
+class _StatsPageState extends ConsumerState<StatsPage> {
   final PageController _pageController = PageController(initialPage: 0);
 
   // --- VARIABLES D'ÉTAT ---
-  bool _isLoading = true;
   List<PlayerStats> _allStats = []; // Stats brutes
 
   // Filtres
@@ -45,107 +43,96 @@ class _StatsPageState extends State<StatsPage> {
   int _selectedTab = 0;
 
   @override
-  void initState() {
-    super.initState();
-    _chargerStats();
-  }
-
-  @override
   void dispose() {
     _pageController.dispose();
     super.dispose();
   }
 
-  Future<void> _chargerStats() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final categorie = prefs.getString('selected_category');
-      final saison = prefs.getString('selected_season');
-      final resJoueurs = await _statsRepo.tousLesJoueurs();
-      final resActions = await _statsRepo.actionsAvecMatch(
-        categorie: categorie,
-        saison: saison,
-      );
+  /// Recalcule le classement à partir des données en cache et des filtres.
+  ///
+  /// AMÉLIORATION AU PASSAGE
+  ///   Avant, changer un filtre relançait `_chargerStats()`, donc **une requête
+  ///   réseau complète**. Les filtres n'étant appliqués qu'en Dart, c'était du
+  ///   trafic pour rien. Désormais les données restent en cache et seul ce
+  ///   calcul est refait : le filtrage est instantané et hors ligne.
+  ///
+  /// Appelée depuis `build`, donc sans `setState`.
+  void _preparer(
+    List<Map<String, dynamic>> resJoueurs,
+    List<Map<String, dynamic>> resActions,
+  ) {
+    Map<String, Map<String, dynamic>> statsMap = {};
 
-      Map<String, Map<String, dynamic>> statsMap = {};
+    // Initialiser la map avec tous les joueurs (pour ceux qui ont 0 stats)
+    for (var j in resJoueurs) {
+      statsMap[j['id'].toString()] = {
+        'name': j['nom'],
+        'goals': 0,
+        'assists': 0,
+      };
+    }
 
-      // Initialiser la map avec tous les joueurs (pour ceux qui ont 0 stats)
-      for (var j in resJoueurs) {
-        statsMap[j['id'].toString()] = {
-          'name': j['nom'],
-          'goals': 0,
-          'assists': 0,
-        };
-      }
+    // Remplir avec les actions
+    final equipes = <String>{};
+    final competitions = <String>{};
+    for (var action in resActions) {
+      final match = action['matchs'];
+      if (match == null) continue;
 
-      // Remplir avec les actions
-      final equipes = <String>{};
-      final competitions = <String>{};
-      for (var action in resActions) {
-        final match = action['matchs'];
-        if (match == null) continue;
+      final equipe = match['equipe']?.toString() ?? '';
+      final competition = match['competition']?.toString() ?? '';
+      if (equipe.isNotEmpty) equipes.add(equipe);
+      if (competition.isNotEmpty) competitions.add(competition);
 
-        final equipe = match['equipe']?.toString() ?? '';
-        final competition = match['competition']?.toString() ?? '';
-        if (equipe.isNotEmpty) equipes.add(equipe);
-        if (competition.isNotEmpty) competitions.add(competition);
+      // FILTRAGE BRUT ICI (pour calculer uniquement ce qui correspond aux filtres)
+      bool okEquipe =
+          _filtresEquipes.isEmpty ||
+          _filtresEquipes.contains(match['equipe']);
+      bool okCompet =
+          _filtresCompet.isEmpty ||
+          _filtresCompet.contains(match['competition']);
+      bool okLieu =
+          _filtresLieux.isEmpty ||
+          _filtresLieux.contains(_lieuCode(match['lieu']));
 
-        // FILTRAGE BRUT ICI (pour calculer uniquement ce qui correspond aux filtres)
-        bool okEquipe =
-            _filtresEquipes.isEmpty ||
-            _filtresEquipes.contains(match['equipe']);
-        bool okCompet =
-            _filtresCompet.isEmpty ||
-            _filtresCompet.contains(match['competition']);
-        bool okLieu =
-            _filtresLieux.isEmpty ||
-            _filtresLieux.contains(_lieuCode(match['lieu']));
+      if (okEquipe && okCompet && okLieu) {
+        final jId = action['joueur_id'].toString();
+        final type = action['type'];
 
-        if (okEquipe && okCompet && okLieu) {
-          final jId = action['joueur_id'].toString();
-          final type = action['type'];
-
-          if (statsMap.containsKey(jId)) {
-            if (type == 'Goal') {
-              statsMap[jId]!['goals']++;
-            } else if (type == 'Assist') {
-              statsMap[jId]!['assists']++;
-            }
+        if (statsMap.containsKey(jId)) {
+          if (type == 'Goal') {
+            statsMap[jId]!['goals']++;
+          } else if (type == 'Assist') {
+            statsMap[jId]!['assists']++;
           }
         }
       }
-
-      // Convertir en liste d'objets PlayerStats
-      List<PlayerStats> computed = [];
-      statsMap.forEach((key, value) {
-        // On ne garde que ceux qui ont au moins 1 stat (sinon la liste est trop longue)
-        int total = value['goals'] + value['assists'];
-        if (total > 0) {
-          computed.add(
-            PlayerStats(
-              name: value['name'],
-              goals: value['goals'],
-              assists: value['assists'],
-              total: total,
-            ),
-          );
-        }
-      });
-
-      setState(() {
-        _listeEquipes = equipes.toList()..sort();
-        _listeCompet = competitions.toList()..sort();
-        _filtresEquipes = _filtresEquipes.intersection(equipes);
-        _filtresCompet = _filtresCompet.intersection(competitions);
-        _filtresLieux = _filtresLieux.intersection({'DOM', 'EXT'});
-        _allStats = computed;
-        _isLoading = false;
-      });
-      _syncPageControllerWithSelectedTab();
-    } catch (e) {
-      print("Erreur stats: $e");
-      setState(() => _isLoading = false);
     }
+
+    // Convertir en liste d'objets PlayerStats
+    List<PlayerStats> computed = [];
+    statsMap.forEach((key, value) {
+      // On ne garde que ceux qui ont au moins 1 stat (sinon la liste est trop longue)
+      int total = value['goals'] + value['assists'];
+      if (total > 0) {
+        computed.add(
+          PlayerStats(
+            name: value['name'],
+            goals: value['goals'],
+            assists: value['assists'],
+            total: total,
+          ),
+        );
+      }
+    });
+
+      _listeEquipes = equipes.toList()..sort();
+      _listeCompet = competitions.toList()..sort();
+      _filtresEquipes = _filtresEquipes.intersection(equipes);
+      _filtresCompet = _filtresCompet.intersection(competitions);
+      _filtresLieux = _filtresLieux.intersection({'DOM', 'EXT'});
+      _allStats = computed;
+      _syncPageControllerWithSelectedTab();
   }
 
   void _syncPageControllerWithSelectedTab() {
@@ -203,6 +190,16 @@ class _StatsPageState extends State<StatsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final joueursAsync = ref.watch(joueursProvider);
+    final actionsAsync = ref.watch(actionsProvider);
+
+    final chargement = joueursAsync.isLoading || actionsAsync.isLoading;
+    final erreur = joueursAsync.error ?? actionsAsync.error;
+
+    if (joueursAsync.hasValue && actionsAsync.hasValue) {
+      _preparer(joueursAsync.value!, actionsAsync.value!);
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('STATISTIQUES'),
@@ -222,13 +219,12 @@ class _StatsPageState extends State<StatsPage> {
             selectedLieux: _filtresLieux,
             competitionColor: _getColorForCompet,
             onApply: (equipes, competitions, lieux) {
+              // Plus de requête : le recalcul se fait sur les données en cache.
               setState(() {
                 _filtresEquipes = equipes;
                 _filtresCompet = competitions;
                 _filtresLieux = lieux;
-                _isLoading = true;
               });
-              _chargerStats();
             },
           ),
 
@@ -251,8 +247,19 @@ class _StatsPageState extends State<StatsPage> {
 
           // 3. CONTENU (PODIUM + LISTE)
           Expanded(
-            child: _isLoading
+            child: chargement
                 ? const Center(child: CircularProgressIndicator())
+                : erreur != null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        'Impossible de charger les statistiques.\n$erreur',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  )
                 : _allStats.isEmpty
                 ? const Center(child: Text("Aucune statistique disponible."))
                 : PageView(
