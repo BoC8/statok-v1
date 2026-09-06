@@ -34,7 +34,7 @@
 | `fl_chart` ^0.66.0 | Graphiques du dashboard équipe |
 | `intl` ^0.20.2 + `flutter_localizations` | Formatage des dates en français |
 | `google_fonts` ^6.2.1 | ⚠️ Déclaré mais **jamais importé** dans `lib/` |
-| `flutter_riverpod` ^2.4.9 | ⚠️ `ProviderScope` est posé dans `main.dart` mais **aucun provider n'existe** |
+| `flutter_riverpod` ^2.4.9 | Contexte global + cache des données des écrans publics (`providers/`) |
 | `go_router` ^14.2.7 | ⚠️ Déclaré mais **non utilisé** — la navigation passe par `Navigator` + `MaterialPageRoute` |
 
 ---
@@ -68,7 +68,10 @@ lib/
 │   ├── match_model.dart .............. VIDE   ← prochain chantier
 │   └── action_model.dart ............. VIDE   ← prochain chantier
 │
-├── providers/ ......................... 2 fichiers VIDES ← prochain chantier
+├── providers/ ......................... l'état partagé (Riverpod)
+│   ├── app_providers.dart ........... 133 l.  [nouveau] contexte + repositories
+│   └── match_provider.dart ..........  90 l.  [nouveau] données des écrans publics
+│
 ├── utils/date_utils.dart .............. VIDE
 │
 ├── widgets/
@@ -152,8 +155,15 @@ sous forme de modèle. Deux valeurs, stockées dans `SharedPreferences`, filtren
 | `selected_season` | `HomePage`, `AdminDashboard` | toutes les pages de données |
 
 **Saisons** : générées par calcul, pas stockées. Première saison = `2025-2026`,
-bascule le **28 mai** (`_buildAvailableSeasons()`, dupliqué dans `home_page.dart` et
-`admin_dashboard.dart`).
+bascule le **28 mai**. Fonction `saisonsDisponibles()` dans
+`providers/app_providers.dart` — elle était dupliquée à l'identique dans `home_page.dart`
+et `admin_dashboard.dart`.
+
+**Depuis le 23/08/2026**, ces deux valeurs sont exposées par `contexteProvider`. Les
+pages ne lisent plus `SharedPreferences` directement : elles observent le provider, qui
+les recharge quand le contexte change. Pour modifier le contexte, passer par
+`majContexte(ref, categorie: …, saison: …)` — écrire dans `SharedPreferences` sans
+invalider le provider laisserait les écrans sur l'ancienne saison.
 
 **Mapping catégorie** — l'app affiche un libellé, la base en stocke un autre :
 
@@ -245,6 +255,14 @@ conventions respectées par le code Dart uniquement.
   même adversaire, même jour) — fin de `_enregistrerMatch()`.
 - **`tab_fcpb` / `tab_adv`** ne sont renseignés que si la compétition contient
   « coupe » (`_isCoupe`), et remis à `null` à l'édition sinon.
+- **Un match gagné aux tirs au but reste un NUL au bilan.** Règle tranchée le
+  23/08/2026 : le score seul qualifie le résultat, le TAB ne décide que de la
+  qualification — c'est la convention des statistiques officielles. Le TAB
+  n'apparaît donc que comme **badge d'affichage** (`tabWin` / `tabLose` dans
+  `resultats_page`, `calendrier_page`, les cartes du dashboard).
+  > Toute nouvelle statistique doit respecter cette règle. `_getCurrentStreak`
+  > l'enfreignait et produisait des phrases contredisant les compteurs V/N/D
+  > affichés juste au-dessus.
 
 ### 5.4 Écarts entre la base et le code
 
@@ -522,10 +540,21 @@ Vérifié aussi : aucune clé `service_role` n'a jamais été commitée dans les
    et `StatsRepository` portent les requêtes des pages publiques ; ces quatre pages
    n'importent plus Supabase du tout. Les onglets admin gardent leurs requêtes en
    propre — ils écrivent autant qu'ils lisent, c'est un chantier distinct.
-3. **Remplir les `providers/`. ← LE CHANTIER SUIVANT.** Riverpod est déjà installé et
-   `ProviderScope` posé :
-   un `FutureProvider` par jeu de données supprime les rechargements en boucle et
-   partage le contexte catégorie/saison au lieu de relire `SharedPreferences` partout.
+3. ~~**Remplir les `providers/`.**~~ ✅ **Fait le 23 août 2026.** Les quatre pages
+   publiques sont des `ConsumerStatefulWidget` : plus d'`initState` de chargement, plus
+   de `SharedPreferences`, plus de `_isLoading`. Les données sont mises en cache
+   (revenir sur une page ne recharge plus rien) et changer de saison invalide
+   `contexteProvider`, ce qui recharge en cascade sans qu'aucune page ne s'en occupe.
+
+   **Gain inattendu** : dans `stats_page`, changer un filtre relançait une requête
+   réseau complète alors que le filtrage se faisait en Dart. Le filtrage est désormais
+   instantané et hors ligne.
+
+   **Compromis assumé** : chaque page a une méthode `_preparer()` appelée depuis
+   `build`, qui affecte des champs sans `setState`. L'alternative propre — réécrire les
+   corps de page pour qu'ils prennent leurs données en paramètres — représentait un
+   risque disproportionné sur des fichiers de 900 à 1 400 lignes. Les fonctions sont
+   déterministes, donc pas de boucle de rebuild.
 4. ~~**Créer `lib/utils/`**~~ ✅ **Fait le 23 août 2026** — `categorie_utils.dart`,
    16 méthodes dédupliquées. Reste la famille « présentation » (voir §7).
 5. ~~**Découper `matchs_tab.dart`**~~ ✅ **Fait le 23 août 2026** : 2 228 lignes devenues
@@ -545,7 +574,41 @@ Vérifié aussi : aucune clé `service_role` n'a jamais été commitée dans les
 
 ---
 
-## 9. Méthode de travail avec un assistant IA
+## 9. Prochaine session : revue de la base
+
+Observations accumulées le 23/08/2026, à instruire ensemble. Aucune n'est urgente.
+
+### Objets morts
+
+| Objet | Constat |
+|---|---|
+| Table `classements` | Créée (equipe, competition, position, categorie, saison), **jamais lue ni écrite** par l'app. Soit implémenter l'affichage du classement, soit supprimer. |
+| `matchs.verrouille` | `bool NOT NULL DEFAULT false`, jamais utilisé. Intention oubliée ? |
+| `adversaires.logo_url` | Jamais utilisé. Afficher les logos adverses serait un vrai plus visuel. |
+| `models/match_model.dart`, `action_model.dart` | Vides — tout circule en `Map<String, dynamic>`, sans vérification du compilateur sur les noms de colonnes. |
+
+### Intégrité
+
+| Point | Risque |
+|---|---|
+| `matchs.equipe` et `programmations.equipe` sont du **texte libre** | Aucune FK vers `equipes.nom`. Renommer une équipe casse le lien avec son historique ; une faute de frappe crée une équipe fantôme. |
+| Pas d'unicité sur `equipes(nom, categorie)` ni `joueurs(nom, categorie_detail)` | Doublons possibles. Le code s'en protège en Dart (`ilike` + `maybeSingle`), pas la base. |
+| `adversaires.nom` est UNIQUE, mais sensible à la casse et aux fautes | « Beaulieu » et « Beaulieux » = deux adversaires. L'autocomplete limite le risque sans l'éliminer. |
+| Un joueur a un `categorie_detail` **vide** | Il n'apparaît dans aucune sélection d'équipe. Repéré lors du diagnostic des catégories. |
+
+### Performance
+
+- `docs/index.sql` est écrit mais **pas encore appliqué**. Sans effet à 73 matchs, utile à cinq saisons d'historique.
+- Les onglets admin filtrent encore leurs flux temps réel en Dart (§6).
+
+### Fonctionnel, à discuter
+
+- Le bundle iOS est `com.example.statok`, le placeholder de `flutter create`. Fonctionnel, mais changer reviendrait à publier une nouvelle app sur le store.
+- `club_page.dart`, `team_page.dart`, `videos_page.dart` : coquilles vides jamais atteintes. La table `adversaires.logo_url` et une page « Vidéos » suggèrent des fonctionnalités envisagées puis laissées de côté.
+
+---
+
+## 10. Méthode de travail avec un assistant IA
 
 1. **Faire lire ce fichier en premier.** Il donne le contexte en 5 secondes.
 2. **Ne jamais demander de « lire tout le projet ».** Décrire la fonctionnalité :
