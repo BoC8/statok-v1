@@ -1,39 +1,39 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-// Importe tes fichiers
-import 'package:statok/pages/category_selection_page.dart';
+import 'pages/coquille.dart';
+import 'supabase_config.dart';
 import 'theme/app_theme.dart';
-import 'supabase_config.dart'; // <-- On importe tes clés ici
 
+/// REFONTE EN COURS
+///   Les quatre écrans publics sont en place derrière la barre
+///   d'onglets. L'espace coachs reste à écrire.
+///
+///   Les anciennes pages sont encore dans `lib/pages/` mais plus
+///   personne ne les atteint : elles interrogent des tables qui
+///   n'existent plus dans le schéma v2. On les supprimera au fur et à
+///   mesure que leurs remplaçantes seront validées.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialisation Supabase avec les constantes de ton fichier config
-  await Supabase.initialize(
-    url:
-        supabaseUrl, // Assure-toi que la variable s'appelle bien comme ça dans supabase_config.dart
-    anonKey: supabaseAnonKey,
-  );
-
-  // Formatage des dates en français
+  await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
   await initializeDateFormatting('fr_FR', null);
 
-  runApp(const ProviderScope(child: MyApp()));
+  runApp(const ProviderScope(child: StatokApp()));
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class StatokApp extends StatelessWidget {
+  const StatokApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'FCPB App',
+      title: 'STATOK',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
+      theme: AppTheme.theme,
       locale: const Locale('fr', 'FR'),
       supportedLocales: const [Locale('fr', 'FR')],
       localizationsDelegates: const [
@@ -41,7 +41,7 @@ class MyApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      home: const CategorySelectionPage(),
+      home: const Coquille(),
     );
   }
 }

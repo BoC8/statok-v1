@@ -66,6 +66,15 @@ flutter:
   assets:
     - assets/images/
 
+  # Archivo en fonte variable (SIL OFL). Embarquée plutôt que téléchargée
+  # par google_fonts : pas de réseau requis au premier lancement, et
+  # surtout l'axe de largeur reste pilotable — c'est lui qui donne aux
+  # titres leur allure de tableau d'affichage.
+  fonts:
+    - family: Archivo
+      fonts:
+        - asset: assets/fonts/Archivo.ttf
+
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
