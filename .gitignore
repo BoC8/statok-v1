@@ -85,3 +85,28 @@ linux/flutter/ephemeral/
 # --- Gestionnaire de versions Flutter ---
 .fvm/
 .fvmrc
+
+# --- Données du club : JAMAIS dans un dépôt public ---
+# Les exports et scripts de migration contiennent les noms des licenciés,
+# dont des mineurs. La structure de la base (schema, seed, engagements)
+# est en revanche versionnée dans docs/, elle ne contient aucun nom.
+Claude outputs/
+docs/migration_v2.sql
+sauvegarde-db/
+*_rows.sql
+*.backup.sql
+
+# Les listes d'effectif, quelle que soit la catégorie.
+#
+# La règle est volontairement large : docs/joueurs_u16_u18.sql est passé
+# entre les mailles en septembre 2026 — vingt-six noms de mineurs
+# poussés dans un dépôt public — parce qu'il fallait nommer chaque
+# fichier un par un. Un motif vaut mieux qu'une liste qu'on oublie de
+# tenir à jour.
+docs/joueurs_*.sql
+docs/effectif_*.sql
+
+# Les identifiants du staff, et les scripts qui nomment une personne
+# réelle par son adresse.
+docs/comptes_coachs.sql
+docs/patch_super_admin.sql
