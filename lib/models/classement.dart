@@ -1,3 +1,4 @@
+import 'categorie.dart';
 import 'joueur.dart';
 import 'rencontre.dart';
 
@@ -18,6 +19,7 @@ enum TypeClassement {
 class LigneClassement {
   const LigneClassement({
     required this.joueur,
+    required this.etiquette,
     required this.buts,
     required this.passes,
     required this.valeur,
@@ -26,6 +28,12 @@ class LigneClassement {
   });
 
   final Joueur joueur;
+
+  /// « 18M », « 15F », « SM » — la catégorie du joueur, pas ses
+  /// initiales. Dans un classement où tout le club se mélange, savoir
+  /// qu'un buteur est U15 en dit plus que de savoir qu'il s'appelle
+  /// A. B.
+  final String etiquette;
   final int buts;
   final int passes;
 
@@ -54,9 +62,12 @@ class LigneClassement {
 ///
 /// Les buts contre son camp adverses (`csc`) n'entrent dans aucun
 /// classement : ils n'ont ni buteur ni passeur à créditer.
+///
+/// [categories] sert à étiqueter chaque joueur par sa catégorie.
 List<LigneClassement> construireClassement({
   required List<But> buts,
   required Map<String, Joueur> joueurs,
+  required List<Categorie> categories,
   required TypeClassement type,
 }) {
   final compteurs = <String, ({int buts, int passes})>{};
@@ -119,6 +130,7 @@ List<LigneClassement> construireClassement({
     lignes.add(
       LigneClassement(
         joueur: e.joueur,
+        etiquette: etiquetteCategorie(categories, e.joueur),
         buts: e.buts,
         passes: e.passes,
         valeur: e.valeur,
@@ -128,4 +140,18 @@ List<LigneClassement> construireClassement({
     );
   }
   return lignes;
+}
+
+
+/// L'étiquette d'un joueur : le code de sa catégorie suivi de son genre.
+///
+/// « 15M », « 18F », « SM ». La catégorie se retrouve par la génération
+/// du joueur — c'est `categories.generations` qui fait le lien, puisque
+/// un licencié n'appartient à aucune équipe fixe.
+String etiquetteCategorie(List<Categorie> categories, Joueur joueur) {
+  for (final c in categories) {
+    if (c.accueille(joueur.generation)) return '${c.code}${joueur.genre}';
+  }
+  // Génération inconnue des catégories : on montre au moins le genre.
+  return joueur.genre;
 }

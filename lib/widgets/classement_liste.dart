@@ -112,7 +112,7 @@ class _Ligne extends StatelessWidget {
                     ),
             ),
             const SizedBox(width: 10),
-            _Initiales(texte: ligne.joueur.initiales, grand: podium),
+            _Etiquette(texte: ligne.etiquette, grand: podium),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -128,18 +128,15 @@ class _Ligne extends StatelessWidget {
                     ),
                   ),
                   // Le cumul affiche son détail : sans lui, deux joueurs
-                  // à 8 points ne se distinguent pas.
+                  // à 8 points ne se distinguent pas. Les mêmes jetons
+                  // que sur la fiche du joueur — on passe de l'un à
+                  // l'autre d'un geste, autant que ça se ressemble.
                   if (type == TypeClassement.decisifs)
                     Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        '${ligne.buts} but${ligne.buts > 1 ? 's' : ''} · '
-                        '${ligne.passes} passe${ligne.passes > 1 ? 's' : ''}',
-                        style: Typo.texte(
-                          taille: 11,
-                          graisse: 600,
-                          couleur: Couleurs.gris,
-                        ),
+                      padding: const EdgeInsets.only(top: 5),
+                      child: RangeeStats(
+                        buts: ligne.buts,
+                        passes: ligne.passes,
                       ),
                     ),
                 ],
@@ -156,27 +153,37 @@ class _Ligne extends StatelessWidget {
   }
 }
 
-class _Initiales extends StatelessWidget {
-  const _Initiales({required this.texte, required this.grand});
+/// L'étiquette de catégorie : « 18M », « 15F », « SM ».
+///
+/// POURQUOI PAS LES INITIALES
+///   Dans un classement où tout le club se mélange, les initiales ne
+///   disent rien qu'on ne lise déjà dans le nom juste à côté. La
+///   catégorie, elle, répond à la vraie question : ce buteur, il joue
+///   dans quelle tranche d'âge ?
+///
+///   L'étiquette est plus large que haute — trois caractères ne tiennent
+///   pas dans un carré sans devenir illisibles.
+class _Etiquette extends StatelessWidget {
+  const _Etiquette({required this.texte, required this.grand});
 
   final String texte;
   final bool grand;
 
   @override
   Widget build(BuildContext context) {
-    final taille = grand ? 30.0 : 26.0;
     return Container(
-      width: taille,
-      height: taille,
+      constraints: BoxConstraints(minWidth: grand ? 34 : 30),
+      height: grand ? 26 : 23,
       alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
       decoration: BoxDecoration(
         color: Couleurs.bleuClair,
-        borderRadius: BorderRadius.circular(grand ? 9 : 8),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         texte,
         style: Typo.texte(
-          taille: grand ? 11 : 10,
+          taille: grand ? 11.5 : 10.5,
           graisse: 700,
           couleur: Couleurs.bleu,
           hauteurLigne: 1,

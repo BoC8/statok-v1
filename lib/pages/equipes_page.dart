@@ -43,8 +43,7 @@ class EquipesPage extends ConsumerWidget {
           ),
           data: (d) => _Bandeau(
             titre: 'Équipes',
-            sousTitre:
-                '${d.nombreEquipes} équipes · saison ${d.saison.libelle}',
+            sousTitre: '${d.nombreEquipes} équipes',
             selecteur: const SelecteurSaison(),
             corps: RefreshIndicator(
               color: Couleurs.bleu,

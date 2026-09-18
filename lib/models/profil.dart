@@ -1,4 +1,6 @@
+import 'categorie.dart';
 import 'equipe.dart';
+import 'joueur.dart';
 
 /// Une habilitation : le droit d'écrire sur une catégorie, éventuellement
 /// restreint à un genre.
@@ -35,13 +37,25 @@ class Profil {
   final String id;
   final String nom;
 
-  /// `'admin'` ou `'coach'`.
+  /// `'super_admin'`, `'admin'` ou `'coach'`.
   final String role;
 
   /// Vide pour un admin : il écrit partout.
   final List<Habilitation> habilitations;
 
-  bool get estAdmin => role == 'admin';
+  /// Le super administrateur : celui qui tient la structure du club.
+  ///
+  /// Catégories, équipes, paramètres, montée de génération — tout ce qui
+  /// se répercute sur l'application entière. Le rôle est décidé en base
+  /// et les politiques RLS l'appliquent ; ce que fait l'interface avec
+  /// cette propriété n'est que du confort. Masquer un écran n'a jamais
+  /// refusé un droit : un compte du staff peut appeler l'API Supabase
+  /// sans passer par l'application.
+  bool get estSuperAdmin => role == 'super_admin';
+
+  /// Le super administrateur a tout ce qu'a un administrateur.
+  /// `est_admin()` répond la même chose en base.
+  bool get estAdmin => role == 'admin' || role == 'super_admin';
 
   /// Ce que l'interface autorise. La base tranche de toute façon : ces
   /// contrôles évitent de proposer un bouton qui finirait en erreur,
@@ -49,12 +63,53 @@ class Profil {
   bool peutEcrireEquipe(Equipe e) =>
       estAdmin || habilitations.any((h) => h.couvre(e));
 
-  bool peutEcrireJoueur({required String generation, required String genre}) {
+  /// Ce coach peut-il modifier la fiche de ce licencié ?
+  ///
+  /// Un joueur n'a pas d'équipe : on passe par sa génération pour
+  /// retrouver sa catégorie, exactement comme le fait la fonction
+  /// `peut_ecrire_joueur` en base. Les deux doivent dire la même chose —
+  /// si elles divergent, c'est la base qui a raison, et l'interface qui
+  /// aura promis ce qu'elle ne pouvait pas tenir.
+  bool peutEcrireJoueur(Joueur joueur, List<Categorie> categories) {
     if (estAdmin) return true;
-    // On ne connaît pas ici la correspondance génération → catégorie :
-    // elle vit dans la base. L'interface reste donc permissive et laisse
-    // la RLS refuser ; c'est le seul endroit où l'on procède ainsi.
-    return habilitations.isNotEmpty;
+    for (final h in habilitations) {
+      if (h.genre != 'T' && h.genre != joueur.genre) continue;
+      for (final c in categories) {
+        if (c.id == h.categorieId && c.accueille(joueur.generation)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /// Les générations que ce compte peut créer.
+  ///
+  /// Dédoublonnées : un coach habilité deux fois sur la même catégorie —
+  /// une fois chez les garçons, une fois chez les filles — verrait
+  /// sinon « U15 » proposé deux fois de suite.
+  List<String> generationsAutorisees(List<Categorie> categories) {
+    final permises = <String>{};
+    for (final c in categories) {
+      if (estAdmin || habilitations.any((h) => h.categorieId == c.id)) {
+        permises.addAll(c.generations);
+      }
+    }
+    return permises.toList();
+  }
+
+  /// Les genres que ce compte peut attribuer à un nouveau licencié.
+  List<String> genresAutorises() {
+    if (estAdmin) return const ['M', 'F'];
+    final permis = <String>{};
+    for (final h in habilitations) {
+      if (h.genre == 'T') {
+        permis.addAll(const ['M', 'F']);
+      } else {
+        permis.add(h.genre);
+      }
+    }
+    return permis.toList()..sort();
   }
 
   factory Profil.depuisJson(

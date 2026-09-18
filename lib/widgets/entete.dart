@@ -8,11 +8,19 @@ import '../theme/app_theme.dart';
 /// Les en-têtes des écrans principaux — ceux qui n'ont pas de bouton
 /// retour parce qu'ils sont à la racine d'un onglet.
 
-/// Le bandeau de l'accueil, avec le blason.
+/// Le bandeau de l'accueil : le blason et le nom du club.
+///
+/// LE SOUS-TITRE NE BOUGE PLUS
+///   Il portait la saison consultée, qui se lit déjà dans le sélecteur
+///   juste à droite — la même information deux fois, à trente pixels
+///   d'écart. C'est maintenant le nom du club en toutes lettres : une
+///   carte de visite, pas un état.
+///
+///   Le sigle et le nom complet se répondent : « FCPB » se lit d'un
+///   coup d'œil pour qui connaît, le nom déplié est là pour les autres.
 class EnteteClub extends StatelessWidget {
-  const EnteteClub({super.key, required this.sousTitre, this.selecteur});
+  const EnteteClub({super.key, this.selecteur});
 
-  final String sousTitre;
   final Widget? selecteur;
 
   @override
@@ -20,25 +28,29 @@ class EnteteClub extends StatelessWidget {
     return Container(
       width: double.infinity,
       color: Couleurs.nuit,
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      padding: const EdgeInsets.fromLTRB(16, 13, 16, 13),
       child: Row(
         children: [
-          const Blason(),
+          const Blason(taille: 46),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   'FCPB',
-                  style: Typo.titre(taille: 18, couleur: Colors.white),
+                  style: Typo.titre(taille: 21, couleur: Colors.white),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 3),
                 Text(
-                  sousTitre,
+                  'Football Club de la Pierre Bleue',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: Typo.texte(
-                    taille: 11,
+                    taille: 11.5,
                     couleur: const Color(0xFF9DB0CE),
+                    hauteurLigne: 1.3,
                   ),
                 ),
               ],
@@ -57,13 +69,20 @@ class EnteteSimple extends StatelessWidget {
   const EnteteSimple({
     super.key,
     required this.titre,
-    required this.sousTitre,
+    this.sousTitre,
     this.selecteur,
     this.dessous,
   });
 
   final String titre;
-  final String sousTitre;
+
+  /// Facultatif : `null` laisse le titre seul.
+  ///
+  /// Plusieurs écrans n'avaient rien d'utile à y mettre — la saison s'y
+  /// répétait alors qu'elle est déjà dans le sélecteur d'à côté. Une
+  /// ligne qui ne dit rien coûte de la hauteur et se lit quand même.
+  final String? sousTitre;
+
   final Widget? selecteur;
   final Widget? dessous;
 
@@ -85,16 +104,18 @@ class EnteteSimple extends StatelessWidget {
                       titre,
                       style: Typo.titre(taille: 18, couleur: Colors.white),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      sousTitre,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Typo.texte(
-                        taille: 11,
-                        couleur: const Color(0xFF9DB0CE),
+                    if (sousTitre != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        sousTitre!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Typo.texte(
+                          taille: 11,
+                          couleur: const Color(0xFF9DB0CE),
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -145,8 +166,21 @@ class SelecteurSaison extends ConsumerWidget {
   }
 }
 
-/// Le blason du club, dessiné plutôt qu'importé : il reste net à toutes
-/// les tailles et ne pèse rien dans le paquet.
+/// Le blason du club.
+///
+/// LE VRAI LOGO, AVEC UN FILET DE SECOURS
+///   C'était un dessin vectoriel — approximatif mais increvable. C'est
+///   maintenant le logo officiel, `assets/images/logo-fcpb-sansfond.png`.
+///
+///   Le dessin est conservé comme `errorBuilder` : si le fichier
+///   disparaît du paquet — un renommage, une ligne oubliée dans
+///   `pubspec.yaml` —, le bandeau montre l'ancien écusson au lieu du
+///   carré gris de Flutter. Une dégradation qu'on peut ne pas remarquer
+///   tout de suite vaut mieux qu'un écran cassé en production.
+///
+///   `filterQuality` compte ici : l'image fait 256 px et s'affiche à 34.
+///   Sans elle, la réduction se fait au plus vite et le blason
+///   scintille.
 class Blason extends StatelessWidget {
   const Blason({super.key, this.taille = 34});
 
@@ -156,8 +190,19 @@ class Blason extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: taille,
-      height: taille * 38 / 34,
-      child: CustomPaint(painter: _BlasonPainter()),
+      height: taille,
+      child: Image.asset(
+        'assets/images/logo-fcpb-sansfond.png',
+        width: taille,
+        height: taille,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.medium,
+        errorBuilder: (context, erreur, pile) => SizedBox(
+          width: taille,
+          height: taille * 38 / 34,
+          child: CustomPaint(painter: _BlasonPainter()),
+        ),
+      ),
     );
   }
 }

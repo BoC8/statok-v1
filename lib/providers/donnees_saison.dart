@@ -111,6 +111,11 @@ class DonneesSaison {
   });
 
   final List<Categorie> categories;
+
+  /// Les équipes de CETTE saison, pas toutes celles du club.
+  ///
+  /// Consulter 2025-2026 doit montrer le club tel qu'il était : avec son
+  /// U14, et sans le U15 C qui n'existait pas encore.
   final List<Equipe> equipes;
   final Map<String, Joueur> joueurs;
 
@@ -236,14 +241,21 @@ final donneesSaisonProvider = FutureProvider<DonneesSaison>((ref) async {
   final saison = await ref.watch(saisonCouranteProvider.future);
   final repo = ref.watch(rencontreRepositoryProvider);
 
-  final (categories, equipes, joueurs, rencontres, buts, tirs) = await (
-    ref.watch(categoriesProvider.future),
-    ref.watch(equipesProvider.future),
-    ref.watch(joueursProvider.future),
-    repo.rencontres(saisonId: saison.id),
-    repo.buts(saisonId: saison.id),
-    repo.tirsAuBut(saisonId: saison.id),
-  ).wait;
+  final (categories, toutesEquipes, joueurs, rencontres, buts, tirs, deLaSaison) =
+      await (
+        ref.watch(categoriesProvider.future),
+        ref.watch(equipesProvider.future),
+        ref.watch(joueursProvider.future),
+        repo.rencontres(saisonId: saison.id),
+        repo.buts(saisonId: saison.id),
+        repo.tirsAuBut(saisonId: saison.id),
+        ref.watch(clubRepositoryProvider).equipesDeLaSaison(saison.id),
+      ).wait;
+
+  // Le club tel qu'il était cette saison-là.
+  final equipes = toutesEquipes
+      .where((e) => deLaSaison.contains(e.id))
+      .toList();
 
   return DonneesSaison(
     categories: categories,

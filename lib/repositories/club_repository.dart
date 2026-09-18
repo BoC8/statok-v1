@@ -52,6 +52,35 @@ class ClubRepository {
     return lignes.map((l) => Equipe.depuisJson(l)).toList();
   }
 
+  /// Les équipes qui existaient réellement lors d'une saison.
+  ///
+  /// POURQUOI CE N'EST PAS `equipes` TOUT COURT
+  ///   Une équipe n'est pas éternelle. Le club alignait un U14 en
+  ///   2025-2026 et ne le fait plus ; il a créé un U15 C cette année. La
+  ///   table `equipes` garde tout le monde — sinon l'historique perdrait
+  ///   ses rattachements —, et c'est l'**engagement** qui dit qui jouait
+  ///   quand.
+  ///
+  ///   On ajoute les équipes ayant des rencontres sans engagement : une
+  ///   saison importée d'ailleurs ne doit pas disparaître de l'écran
+  ///   pour un engagement oublié.
+  Future<Set<String>> equipesDeLaSaison(String saisonId) async {
+    final engagees = await _db
+        .from('engagements')
+        .select('equipe_id')
+        .eq('saison_id', saisonId);
+
+    final avecMatchs = await _db
+        .from('rencontres')
+        .select('equipe_id')
+        .eq('saison_id', saisonId);
+
+    return {
+      for (final l in engagees) l['equipe_id'] as String,
+      for (final l in avecMatchs) l['equipe_id'] as String,
+    };
+  }
+
   /// Les rencontres jouées d'une saison, groupées par équipe et triées du
   /// plus récent au plus ancien.
   ///

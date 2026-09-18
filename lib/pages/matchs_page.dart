@@ -9,6 +9,7 @@ import '../widgets/communs.dart';
 import '../widgets/entete.dart';
 import '../widgets/filtres.dart';
 import '../widgets/ligne_match.dart';
+import 'joueur_page.dart';
 
 /// Le calendrier : les rencontres à venir et les résultats, ensemble.
 ///
@@ -49,11 +50,10 @@ class MatchsPageState extends ConsumerState<MatchsPage> {
         child: Column(
           children: [
             EnteteSimple(
+              // Pas de sous-titre : la saison se lit dans le sélecteur
+              // juste à droite, et le segment ci-dessous dit déjà ce
+              // qu'on regarde.
               titre: 'Calendrier',
-              sousTitre: saison == null
-                  ? '…'
-                  : 'Saison ${saison.libelle}'
-                        '${archive ? ' · saison terminée' : ''}',
               selecteur: const SelecteurSaison(),
               dessous: archive
                   ? null
@@ -77,7 +77,7 @@ class MatchsPageState extends ConsumerState<MatchsPage> {
                 data: (d) => Column(
                   children: [
                     ChipsGroupes(
-                      categories: d.categories,
+                      donnees: d,
                       filtre: _filtre,
                       onChange: (f) => setState(() => _filtre = f),
                       avant: BoutonCompetitions(
@@ -159,6 +159,7 @@ class MatchsPageState extends ConsumerState<MatchsPage> {
                         )
                       else
                         LigneMatch(
+                          onJoueur: (id) => JoueurPage.ouvrir(context, id),
                           rencontre: entree.value[i],
                           nomEquipe: d.nomEquipe(entree.value[i].equipeId),
                           buts: d.butsDe(entree.value[i].id),

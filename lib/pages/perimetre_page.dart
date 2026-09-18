@@ -10,6 +10,7 @@ import '../theme/app_theme.dart';
 import '../widgets/classement_liste.dart';
 import '../widgets/communs.dart';
 import '../widgets/ligne_match.dart';
+import 'joueur_page.dart';
 
 /// L'écran d'un périmètre : **une équipe** ou **toute une catégorie**.
 ///
@@ -117,6 +118,7 @@ class _PerimetrePageState extends ConsumerState<PerimetrePage> {
     final decisifs = construireClassement(
       buts: d.buts,
       joueurs: d.joueurs,
+      categories: d.categories,
       type: TypeClassement.decisifs,
     );
 
@@ -144,6 +146,7 @@ class _PerimetrePageState extends ConsumerState<PerimetrePage> {
           enfant: derniere == null
               ? const Vide(message: 'Aucun match joué sur cette saison.')
               : LigneMatch(
+                  onJoueur: (id) => JoueurPage.ouvrir(context, id),
                   rencontre: derniere,
                   nomEquipe: _nomEquipe(d, derniere.equipeId),
                   buts: d.butsDe(derniere.id),
@@ -163,6 +166,7 @@ class _PerimetrePageState extends ConsumerState<PerimetrePage> {
         enfant: ClassementListe(
           lignes: decisifs.take(3).toList(),
           type: TypeClassement.decisifs,
+          onJoueur: (id) => JoueurPage.ouvrir(context, id),
         ),
       ),
 
@@ -231,6 +235,7 @@ class _PerimetrePageState extends ConsumerState<PerimetrePage> {
                     )
                   else
                     LigneMatch(
+                      onJoueur: (id) => JoueurPage.ouvrir(context, id),
                       rencontre: entree.value[i],
                       nomEquipe: _nomEquipe(d, entree.value[i].equipeId),
                       buts: d.butsDe(entree.value[i].id),
@@ -253,6 +258,7 @@ class _PerimetrePageState extends ConsumerState<PerimetrePage> {
     final lignes = construireClassement(
       buts: d.buts,
       joueurs: d.joueurs,
+      categories: d.categories,
       type: _typeClassement,
     );
 
@@ -275,6 +281,7 @@ class _PerimetrePageState extends ConsumerState<PerimetrePage> {
         enfant: ClassementListe(
           lignes: lignes,
           type: _typeClassement,
+          onJoueur: (id) => JoueurPage.ouvrir(context, id),
           messageVide: switch (_typeClassement) {
             TypeClassement.buteurs => 'Aucun but enregistré sur cette saison.',
             TypeClassement.passeurs =>

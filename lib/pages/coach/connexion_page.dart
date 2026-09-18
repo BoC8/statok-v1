@@ -147,8 +147,7 @@ class _ConnexionPageState extends ConsumerState<ConnexionPage> {
                 ),
                 const SizedBox(height: 18),
                 Text(
-                  "Les comptes sont créés par l'administrateur du club. "
-                  "Si vous n'arrivez pas à vous connecter, contactez-le.",
+                  "Si vous n'arrivez pas à vous connecter, contactez Clément Bolomey",
                   textAlign: TextAlign.center,
                   style: Typo.texte(
                     taille: 11,

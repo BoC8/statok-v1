@@ -21,23 +21,36 @@ class _Etiquette extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 5),
+    padding: const EdgeInsets.only(bottom: 3),
     child: Text(
       texte,
-      style: Typo.texte(taille: 11.5, graisse: 600, couleur: Couleurs.gris),
+      style: Typo.texte(taille: 11, graisse: 600, couleur: Couleurs.gris),
     ),
   );
 }
 
+/// L'espace sous un champ.
+///
+/// UNE SEULE CONSTANTE POUR TOUT L'ESPACE COACHS
+///   Les formulaires de saisie se remplissent le dimanche soir, sur un
+///   téléphone, souvent debout. Chaque pixel gagné ici, c'est un
+///   défilement de moins — et il y a une dizaine de champs par écran,
+///   donc l'addition se voit. La valeur vit à un seul endroit pour que
+///   les huit champs ne dérivent jamais les uns des autres.
+const _entreChamps = 9.0;
+
 InputDecoration _decoration({Widget? suffixe, bool dense = false}) =>
     InputDecoration(
-      isDense: dense,
+      // `isDense` retire la hauteur minimale que Material réserve pour
+      // un libellé flottant qu'on n'utilise pas : nos étiquettes sont
+      // au-dessus du champ, pas dedans.
+      isDense: true,
       filled: true,
       fillColor: Couleurs.blanc,
       suffixIcon: suffixe,
       contentPadding: EdgeInsets.symmetric(
         horizontal: 12,
-        vertical: dense ? 9 : 12,
+        vertical: dense ? 8 : 11,
       ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(11),
@@ -75,7 +88,7 @@ class ChampListe<T> extends StatelessWidget {
     final valide = options.any((o) => o.$1 == valeur) ? valeur : null;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: _entreChamps),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -100,6 +113,46 @@ class ChampListe<T> extends StatelessWidget {
   }
 }
 
+/// Un champ de texte libre.
+class ChampTexte extends StatelessWidget {
+  const ChampTexte({
+    super.key,
+    required this.libelle,
+    required this.controleur,
+    required this.onChange,
+    this.majusculesAutomatiques = true,
+  });
+
+  final String libelle;
+  final TextEditingController controleur;
+  final VoidCallback onChange;
+  final bool majusculesAutomatiques;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: _entreChamps),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _Etiquette(libelle),
+          TextField(
+            controller: controleur,
+            // Les prénoms et les noms commencent par une majuscule :
+            // autant l'obtenir sans y penser.
+            textCapitalization: majusculesAutomatiques
+                ? TextCapitalization.words
+                : TextCapitalization.none,
+            onChanged: (_) => onChange(),
+            style: Typo.texte(taille: 14),
+            decoration: _decoration(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Un champ numérique entier positif.
 class ChampNombre extends StatelessWidget {
   const ChampNombre({
@@ -116,7 +169,7 @@ class ChampNombre extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: _entreChamps),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -130,6 +183,88 @@ class ChampNombre extends StatelessWidget {
             decoration: _decoration(),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Un compteur à deux boutons : « − 3 + ».
+///
+/// POURQUOI PAS UN CHAMP DE SAISIE
+///   Les valeurs vont de un à cinq. Un champ numérique ferait monter le
+///   clavier, cacherait la moitié de l'écran et demanderait de le
+///   refermer — trois gestes pour taper un chiffre. Deux boutons, c'est
+///   un geste par but, et rien ne bouge autour.
+class Compteur extends StatelessWidget {
+  const Compteur({
+    super.key,
+    required this.valeur,
+    required this.onChange,
+    this.minimum = 1,
+    this.maximum = 20,
+  });
+
+  final int valeur;
+  final ValueChanged<int> onChange;
+  final int minimum;
+  final int maximum;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 34,
+      decoration: BoxDecoration(
+        color: Couleurs.blanc,
+        border: Border.all(color: Couleurs.ligne),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _Pas(
+            icone: Icons.remove,
+            actif: valeur > minimum,
+            onTap: () => onChange(valeur - 1),
+          ),
+          SizedBox(
+            width: 24,
+            child: Text(
+              '$valeur',
+              textAlign: TextAlign.center,
+              style: Typo.chiffres(taille: 15),
+            ),
+          ),
+          _Pas(
+            icone: Icons.add,
+            actif: valeur < maximum,
+            onTap: () => onChange(valeur + 1),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Pas extends StatelessWidget {
+  const _Pas({required this.icone, required this.actif, required this.onTap});
+
+  final IconData icone;
+  final bool actif;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: actif ? onTap : null,
+      borderRadius: BorderRadius.circular(10),
+      child: SizedBox(
+        width: 32,
+        height: 34,
+        child: Icon(
+          icone,
+          size: 17,
+          color: actif ? Couleurs.nuit : Couleurs.ligne,
+        ),
       ),
     );
   }
@@ -153,7 +288,7 @@ class ChampSegments extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: _entreChamps),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -208,6 +343,17 @@ class ChampDateHeure extends StatelessWidget {
     final h = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(valeur),
+      // PAS D'HORLOGE, LA SAISIE DIRECTE
+      //
+      //   Le cadran de Material est fait pour choisir une heure qu'on
+      //   cherche. Ici on la connaît : le coup d'envoi est à 15 h, ou à
+      //   13 h 30, et le coach le sait avant d'ouvrir l'écran. Viser une
+      //   aiguille au pouce pour saisir une valeur qu'on a déjà en tête,
+      //   c'est du travail en plus.
+      //
+      //   `inputOnly` et non `input` : ce dernier laisse un bouton pour
+      //   revenir au cadran, qu'on finit par toucher par erreur.
+      initialEntryMode: TimePickerEntryMode.inputOnly,
       builder: (ctx, enfant) => MediaQuery(
         // Les horaires de match se disent en 24 h, jamais en AM/PM.
         data: MediaQuery.of(ctx).copyWith(alwaysUse24HourFormat: true),
@@ -223,7 +369,7 @@ class ChampDateHeure extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: _entreChamps),
       child: Row(
         children: [
           Expanded(
@@ -278,7 +424,7 @@ class _Bouton extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(11),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
         decoration: BoxDecoration(
           color: Couleurs.blanc,
           border: Border.all(color: Couleurs.ligne),
@@ -361,7 +507,7 @@ class ChampJoueur extends StatelessWidget {
               .toList();
 
     return Padding(
-      padding: EdgeInsets.only(bottom: compact ? 0 : 12),
+      padding: EdgeInsets.only(bottom: compact ? 0 : _entreChamps),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -375,7 +521,7 @@ class ChampJoueur extends StatelessWidget {
             child: Container(
               padding: EdgeInsets.symmetric(
                 horizontal: 12,
-                vertical: compact ? 9 : 13,
+                vertical: compact ? 9 : 11,
               ),
               decoration: BoxDecoration(
                 color: Couleurs.blanc,
@@ -615,7 +761,7 @@ class ChampAdversaire extends ConsumerWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: _entreChamps),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

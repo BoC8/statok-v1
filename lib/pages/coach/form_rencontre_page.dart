@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/equipe.dart';
+import '../../models/feuille_match.dart';
 import '../../models/joueur.dart';
 import '../../models/profil.dart';
 import '../../models/rencontre.dart';
+import '../../models/saison.dart';
 import '../../providers/auth_providers.dart';
 import '../../providers/club_providers.dart';
-import '../../providers/donnees_saison.dart';
+import '../../providers/donnees_saison.dart' show joueursProvider;
 import '../../theme/app_theme.dart';
 import '../../widgets/communs.dart';
 import 'champs.dart';
@@ -40,6 +42,7 @@ class FormRencontrePage extends ConsumerStatefulWidget {
 
 class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
   String? _equipeId;
+  String? _saisonCreation;
   String? _cleCompetition;
   String? _adversaireId;
   late DateTime _date;
@@ -48,9 +51,18 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
   final _scorePour = TextEditingController();
   final _scoreContre = TextEditingController();
 
-  /// Les buts en cours de saisie. `joueurId` nul + `csc` vrai = but
-  /// contre son camp adverse.
-  final List<_ButBrouillon> _buts = [];
+  /// La feuille de match, en compteurs : un joueur, un nombre.
+  ///
+  /// Le club ne note pas qui a servi qui — seuls les totaux comptent.
+  /// La base garde malgré tout une ligne par but ; `feuille_match.dart`
+  /// fait le passage entre les deux formes.
+  final List<LigneCompteur> _buteurs = [];
+  final List<LigneCompteur> _passeurs = [];
+
+  /// Les buts contre leur camp inscrits par l'adversaire. Ils comptent
+  /// au score du FCPB et n'ont ni buteur ni passeur à créditer.
+  int _csc = 0;
+
   final List<_TirBrouillon> _tirs = [];
   bool _avecTirsAuBut = false;
   final _tabContre = TextEditingController();
@@ -65,12 +77,13 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
   ///
   /// En modification, c'est celle de la rencontre : rouvrir un match de
   /// 2025-2026 ne doit jamais le faire basculer dans la saison en cours.
-  /// En création, c'est la saison **active**, pas celle que l'écran
-  /// public affiche — un coach qui vient de consulter les archives
-  /// saisirait sinon le match de dimanche dans la mauvaise année.
+  /// En création, c'est la saison de travail du staff — la saison en
+  /// cours pour un coach, la saison consultée pour un administrateur.
+  /// Voir `saisonAtelierProvider`.
   String? _saisonId(WidgetRef ref) =>
       widget.rencontre?.saisonId ??
-      ref.watch(saisonActiveProvider).value?.id;
+      _saisonCreation ??
+      ref.watch(saisonAtelierProvider).value?.id;
 
   @override
   void initState() {
@@ -110,7 +123,7 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
   ///   reconstruction écraserait la saisie en cours.
   void _completerDepuisExistant(
     List<OptionCompetition> options,
-    DonneesSaison donnees,
+    (List<But>, List<TirAuBut>) detail,
   ) {
     final r = widget.rencontre;
     if (r == null || _detailRepris) return;
@@ -133,16 +146,16 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
 
     // La feuille de match : sans cette reprise, ouvrir puis enregistrer
     // une rencontre effacerait tous ses buts.
-    for (final b in donnees.butsDe(r.id)) {
-      _buts.add(
-        _ButBrouillon()
-          ..joueurId = b.joueurId
-          ..passeurId = b.passeurId
-          ..csc = b.csc,
-      );
-    }
-    final tirs = [...donnees.tirsDe(r.id)]
-      ..sort((a, b) => a.ordre.compareTo(b.ordre));
+    //
+    // On la relit en compteurs. L'appariement buteur ↔ passeur qui
+    // existait en base est perdu au passage, et c'est sans conséquence :
+    // personne ne le lit.
+    final (butsLus, tirsLus) = detail;
+    final feuille = decomposerButs(butsLus);
+    _buteurs.addAll(feuille.buteurs);
+    _passeurs.addAll(feuille.passeurs);
+    _csc = feuille.csc;
+    final tirs = [...tirsLus]..sort((a, b) => a.ordre.compareTo(b.ordre));
     for (final t in tirs) {
       _tirs.add(
         _TirBrouillon()
@@ -154,10 +167,20 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
 
   @override
   Widget build(BuildContext context) {
-    final equipesAsync = ref.watch(equipesModifiablesProvider);
-    final donneesAsync = ref.watch(donneesSaisonProvider);
+    final profil = ref.watch(profilProvider).value;
     final saisons = ref.watch(saisonsProvider).value ?? const [];
     final saisonId = _saisonId(ref);
+    final equipesAsync = saisonId == null
+        ? const AsyncValue<List<Equipe>>.loading()
+        : ref.watch(equipesModifiablesProvider(saisonId));
+    final joueursAsync = ref.watch(joueursProvider);
+
+    // La feuille de match n'est relue qu'en modification.
+    final detailAsync = _creation
+        ? AsyncValue<(List<But>, List<TirAuBut>)>.data(
+            (const <But>[], const <TirAuBut>[]),
+          )
+        : ref.watch(detailRencontreProvider(widget.rencontre!.id));
 
     String libelleSaison = '';
     for (final s in saisons) {
@@ -179,13 +202,18 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
             Expanded(
               child:
                   (equipesAsync.value == null ||
-                      donneesAsync.value == null ||
+                      joueursAsync.value == null ||
+                      detailAsync.value == null ||
+                      profil == null ||
                       saisonId == null)
                   ? const Center(child: CircularProgressIndicator())
                   : _formulaire(
-                      equipesAsync.value!,
-                      donneesAsync.value!,
-                      saisonId,
+                      profil: profil,
+                      equipes: equipesAsync.value!,
+                      joueursDuClub: joueursAsync.value!.values.toList(),
+                      detail: detailAsync.value!,
+                      saisonId: saisonId,
+                      saisons: saisons,
                     ),
             ),
           ],
@@ -194,28 +222,85 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
     );
   }
 
-  Widget _formulaire(
-    List<Equipe> equipes,
-    DonneesSaison donnees,
-    String saisonId,
-  ) {
+  Widget _formulaire({
+    required Profil profil,
+    required List<Equipe> equipes,
+    required List<Joueur> joueursDuClub,
+    required (List<But>, List<TirAuBut>) detail,
+    required String saisonId,
+    required List<Saison> saisons,
+  }) {
+    // Le choix de la saison — RÉSERVÉ AUX ADMINISTRATEURS.
+    //
+    //   Un coach n'écrit que sur la saison en cours. Lui montrer un
+    //   sélecteur serait lui promettre une correction des archives que
+    //   la règle du club lui refuse. Il est rendu avant tout le reste :
+    //   placé plus bas, il disparaissait quand l'administrateur n'avait
+    //   aucune équipe sur la saison choisie, et le message l'invitait
+    //   alors à en changer sans lui en donner le moyen.
+    final choixSaison = profil.estAdmin && _creation && saisons.length > 1
+        ? Padding(
+            padding: const EdgeInsets.fromLTRB(0, 20, 0, 0),
+            child: CarteBlanche(
+              rognage: false,
+              enfant: Padding(
+                padding: const EdgeInsets.fromLTRB(13, 12, 13, 3),
+                child: ChampListe<String>(
+                  libelle: 'Saison',
+                  valeur: saisonId,
+                  options: [for (final s in saisons) (s.id, s.libelle)],
+                  onChange: (v) => setState(() {
+                    _saisonCreation = v;
+                    _equipeId = null;
+                    _cleCompetition = null;
+                    _buteurs.clear();
+                    _passeurs.clear();
+                    _csc = 0;
+                    _tirs.clear();
+                    _avecTirsAuBut = false;
+                  }),
+                ),
+              ),
+            ),
+          )
+        : null;
+
     if (equipes.isEmpty) {
-      return const Vide(
-        message: "Votre compte n'est habilité sur aucune équipe. "
-            "Demandez à l'administrateur du club de vous attribuer une "
-            'catégorie.',
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 24),
+        children: [
+          if (choixSaison != null) choixSaison,
+          Padding(
+            padding: const EdgeInsets.only(top: 20),
+            child: CarteBlanche(
+              enfant: Vide(
+                message: choixSaison != null
+                    ? "Aucune de vos équipes n'existait lors de cette "
+                          'saison. Choisissez-en une autre ci-dessus, ou '
+                          "créez l'engagement manquant."
+                    : "Votre compte n'est habilité sur aucune équipe. "
+                          "Demandez à l'administrateur du club de vous "
+                          'attribuer une catégorie.',
+              ),
+            ),
+          ),
+        ],
       );
     }
 
-    _equipeId ??= equipes.first.id;
+    // L'équipe retenue doit exister dans la saison choisie : changer de
+    // saison peut la faire disparaître.
+    if (_equipeId == null || !equipes.any((e) => e.id == _equipeId)) {
+      _equipeId = equipes.first.id;
+    }
     final options = ref
         .watch(
           engagementsProvider((equipeId: _equipeId!, saisonId: saisonId)),
         )
         .value;
-    if (options != null) _completerDepuisExistant(options, donnees);
+    if (options != null) _completerDepuisExistant(options, detail);
 
-    final joueurs = donnees.joueurs.values.toList()
+    final joueurs = [...joueursDuClub]
       ..sort((a, b) => a.nom.toLowerCase().compareTo(b.nom.toLowerCase()));
 
     // L'équipe choisie sert à ne proposer que les joueurs qui peuvent
@@ -226,14 +311,16 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
     }
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 32),
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 24),
       children: [
+        if (choixSaison != null) choixSaison,
         Section(
+          dense: true,
           titre: 'La rencontre',
           enfant: CarteBlanche(
             rognage: false,
             enfant: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+              padding: const EdgeInsets.fromLTRB(13, 12, 13, 5),
               child: Column(
                 children: [
                   ChampListe<String>(
@@ -247,7 +334,9 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
                       // L'engagement dépend de l'équipe : il ne survit
                       // pas au changement.
                       _cleCompetition = null;
-                      _buts.clear();
+                      _buteurs.clear();
+                      _passeurs.clear();
+                      _csc = 0;
                       _tirs.clear();
                       _avecTirsAuBut = false;
                     }),
@@ -296,11 +385,12 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
         ),
 
         Section(
+          dense: true,
           titre: 'Où en est le match ?',
           enfant: CarteBlanche(
             rognage: false,
             enfant: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+              padding: const EdgeInsets.fromLTRB(13, 12, 13, 5),
               child: Column(
                 children: [
                   ChampSegments(
@@ -338,17 +428,16 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
                       _blocTirsAuBut(joueurs, equipeChoisie),
                   ] else
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.only(bottom: 10),
                       child: Text(
                         _statut == 'programmee'
-                            ? 'Le score et la feuille de match se '
-                                  'renseigneront après la rencontre.'
-                            : "Un match reporté ou annulé ne porte pas de "
+                            ? 'Le score se renseignera après la rencontre.'
+                            : 'Un match reporté ou annulé ne porte pas de '
                                   'score.',
                         style: Typo.texte(
-                          taille: 11.5,
+                          taille: 11,
                           couleur: Couleurs.gris,
-                          hauteurLigne: 1.5,
+                          hauteurLigne: 1.45,
                         ),
                       ),
                     ),
@@ -360,7 +449,7 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
 
         if (_statut == 'jouee') _blocButeurs(joueurs, equipeChoisie),
 
-        const SizedBox(height: 22),
+        const SizedBox(height: 16),
         if (_erreur != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
@@ -424,61 +513,86 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
 
   Widget _blocButeurs(List<Joueur> joueurs, Equipe? equipe) {
     final score = int.tryParse(_scorePour.text);
-    final ecart = score != null && score != _buts.length;
+    final saisis =
+        _buteurs.fold<int>(0, (t, l) => t + (l.complete ? l.nombre : 0)) +
+        _csc;
+    final ecart = score != null && score != saisis;
 
     return Section(
+      dense: true,
       titre: 'Buteurs et passeurs',
       enfant: CarteBlanche(
         rognage: false,
         enfant: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+          padding: const EdgeInsets.fromLTRB(13, 12, 13, 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (_buts.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Text(
-                    'Une ligne par but marqué par le FCPB. Le détail est '
-                    'facultatif : le score fait foi.',
-                    style: Typo.texte(
-                      taille: 11.5,
-                      couleur: Couleurs.gris,
-                      hauteurLigne: 1.5,
+              // UN JOUEUR, UN NOMBRE
+              //
+              //   Un triplé se saisit une fois, avec un 3 — pas trois
+              //   lignes. Le club ne note pas qui a servi qui : les deux
+              //   listes sont donc indépendantes, et il n'y a rien à
+              //   apparier.
+              _Compteurs(
+                titre: 'Buteurs',
+                libelleJoueur: 'un buteur',
+                icone: iconeBut,
+                libelleAjout: 'Ajouter un buteur',
+                lignes: _buteurs,
+                joueurs: joueurs,
+                equipe: equipe,
+                onChange: () => setState(() {}),
+              ),
+
+              const SizedBox(height: 10),
+              const Divider(height: 1),
+              const SizedBox(height: 10),
+
+              _Compteurs(
+                titre: 'Passeurs',
+                libelleJoueur: 'un passeur',
+                icone: iconePasse,
+                libelleAjout: 'Ajouter un passeur',
+                lignes: _passeurs,
+                joueurs: joueurs,
+                equipe: equipe,
+                onChange: () => setState(() {}),
+              ),
+
+              const SizedBox(height: 10),
+              const Divider(height: 1),
+              const SizedBox(height: 10),
+
+              // Le csc adverse : il compte au score, sans personne à
+              // créditer. Un compteur suffit, il n'a pas de nom.
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Buts contre son camp adverse',
+                      style: Typo.texte(taille: 12.5, graisse: 600),
                     ),
                   ),
-                ),
-              for (var i = 0; i < _buts.length; i++)
-                _LigneBut(
-                  numero: i + 1,
-                  but: _buts[i],
-                  joueurs: joueurs,
-                  equipe: equipe,
-                  onChange: () => setState(() {}),
-                  onSupprimer: () => setState(() => _buts.removeAt(i)),
-                ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: () =>
-                      setState(() => _buts.add(_ButBrouillon())),
-                  icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Ajouter un but'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Couleurs.bleu,
-                    padding: EdgeInsets.zero,
+                  Compteur(
+                    valeur: _csc,
+                    minimum: 0,
+                    onChange: (v) => setState(() => _csc = v),
                   ),
-                ),
+                ],
               ),
+
               // On signale l'écart, on ne recalcule rien : le coach peut
               // très bien connaître le score sans se souvenir de tous
               // les buteurs.
-              if (ecart)
+              if (ecart) ...[
+                const SizedBox(height: 10),
                 _Avertissement(
                   texte: '$score but${score > 1 ? 's' : ''} au score, '
-                      '${_buts.length} saisi${_buts.length > 1 ? 's' : ''}. '
+                      '$saisis attribué${saisis > 1 ? 's' : ''}. '
                       "Ce n'est pas bloquant, mais vérifiez.",
                 ),
+              ],
             ],
           ),
         ),
@@ -613,6 +727,14 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
       final jouee = _statut == 'jouee';
       final reussis = _tirs.where((t) => t.marque).length;
 
+      // Les compteurs redeviennent une ligne par but, comme la base les
+      // attend. Voir `feuille_match.dart`.
+      final feuille = composerButs(
+        buteurs: _buteurs,
+        passeurs: _passeurs,
+        csc: _csc,
+      );
+
       await ref.read(adminRepositoryProvider).enregistrerRencontre(
         id: widget.rencontre?.id,
         saisonId: saisonId,
@@ -629,17 +751,7 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
         tabContre: jouee && _avecTirsAuBut
             ? int.parse(_tabContre.text)
             : null,
-        buts: jouee
-            ? [
-                for (final b in _buts)
-                  But(
-                    rencontreId: '',
-                    joueurId: b.csc ? null : b.joueurId,
-                    passeurId: b.csc ? null : b.passeurId,
-                    csc: b.csc,
-                  ),
-              ]
-            : const [],
+        buts: jouee ? feuille.buts : const [],
         tirsAuBut: jouee && _avecTirsAuBut
             ? [
                 for (var i = 0; i < _tirs.length; i++)
@@ -700,12 +812,24 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
       if (pour == null || contre == null) {
         return 'Renseignez les deux scores.';
       }
-      if (_buts.any((b) => !b.csc && b.joueurId == null)) {
-        return 'Un but est sans buteur : choisissez-le ou cochez « contre '
-            'son camp ».';
+      // Une ligne sans joueur est une ligne qu'on a ouverte puis
+      // oubliée : on la signale plutôt que de l'ignorer en silence.
+      if (_buteurs.any((l) => l.joueurId == null)) {
+        return 'Une ligne de buteur est vide : choisissez le joueur ou '
+            'retirez la ligne.';
       }
-      if (_buts.any((b) => b.passeurId != null && b.passeurId == b.joueurId)) {
-        return 'Un joueur ne peut pas se faire la passe à lui-même.';
+      if (_passeurs.any((l) => l.joueurId == null)) {
+        return 'Une ligne de passeur est vide : choisissez le joueur ou '
+            'retirez la ligne.';
+      }
+      if (_buteurs.map((l) => l.joueurId).toSet().length != _buteurs.length) {
+        return 'Un buteur figure deux fois : additionnez ses buts sur une '
+            'seule ligne.';
+      }
+      if (_passeurs.map((l) => l.joueurId).toSet().length !=
+          _passeurs.length) {
+        return 'Un passeur figure deux fois : additionnez ses passes sur '
+            'une seule ligne.';
       }
       if (_avecTirsAuBut) {
         if (pour != contre) {
@@ -776,100 +900,138 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
 //  Brouillons de saisie
 // =====================================================================
 
-class _ButBrouillon {
-  String? joueurId;
-  String? passeurId;
-  bool csc = false;
-}
-
 class _TirBrouillon {
   String? joueurId;
   bool marque = true;
 }
 
-class _LigneBut extends StatelessWidget {
-  const _LigneBut({
-    required this.numero,
-    required this.but,
+/// Une liste « joueur + nombre » : buteurs ou passeurs.
+///
+/// UN JOUEUR N'APPARAÎT QU'UNE FOIS
+///   C'est tout l'intérêt du compteur. Le formulaire refuse d'ailleurs
+///   d'enregistrer deux lignes pour le même joueur — mieux vaut le dire
+///   que d'additionner en douce et laisser croire à une double saisie.
+class _Compteurs extends StatelessWidget {
+  const _Compteurs({
+    required this.titre,
+    required this.libelleJoueur,
+    required this.icone,
+    required this.libelleAjout,
+    required this.lignes,
     required this.joueurs,
     required this.equipe,
     required this.onChange,
-    required this.onSupprimer,
   });
 
-  final int numero;
-  final _ButBrouillon but;
+  final String titre;
+
+  /// « un buteur », « un passeur » — ce que dit la case vide.
+  final String libelleJoueur;
+
+  final IconData icone;
+  final String libelleAjout;
+  final List<LigneCompteur> lignes;
   final List<Joueur> joueurs;
   final Equipe? equipe;
   final VoidCallback onChange;
-  final VoidCallback onSupprimer;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.only(bottom: 10),
-      decoration: const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: Couleurs.ligne, style: BorderStyle.solid),
-        ),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'But $numero',
-                  style: Typo.texte(taille: 12, graisse: 700),
+    final total = lignes.fold<int>(
+      0,
+      (t, l) => t + (l.complete ? l.nombre : 0),
+    );
+    // Ceux déjà nommés : on ne les repropose pas dans les autres lignes
+    // de la même liste.
+    final pris = lignes.map((l) => l.joueurId).whereType<String>().toSet();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Icon(icone, size: 13, color: Couleurs.gris2),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                titre,
+                style: Typo.texte(
+                  taille: 11.5,
+                  graisse: 700,
+                  couleur: Couleurs.gris2,
                 ),
               ),
-              _CaseACocher(
-                libelle: 'Contre son camp adverse',
-                coche: but.csc,
-                onChange: (v) {
-                  but.csc = v;
-                  if (v) {
-                    but.joueurId = null;
-                    but.passeurId = null;
-                  }
-                  onChange();
-                },
-              ),
-              IconButton(
-                onPressed: onSupprimer,
-                icon: const Icon(Icons.close, size: 17),
-                color: Couleurs.gris2,
-                visualDensity: VisualDensity.compact,
-              ),
-            ],
-          ),
-          if (!but.csc) ...[
-            ChampJoueur(
-              libelle: 'Buteur',
-              valeur: but.joueurId,
-              joueurs: joueurs,
-              equipe: equipe,
-              onChange: (v) {
-                but.joueurId = v;
-                onChange();
-              },
             ),
-            ChampJoueur(
-              libelle: 'Passeur',
-              valeur: but.passeurId,
-              joueurs: joueurs,
-              equipe: equipe,
-              facultatif: true,
-              exclu: but.joueurId,
-              onChange: (v) {
-                but.passeurId = v;
-                onChange();
-              },
-            ),
+            if (total > 0)
+              Text(
+                '$total au total',
+                style: Typo.texte(taille: 11, couleur: Couleurs.gris2),
+              ),
           ],
-        ],
-      ),
+        ),
+        for (var i = 0; i < lignes.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: ChampJoueur(
+                    libelle: libelleJoueur,
+                    valeur: lignes[i].joueurId,
+                    joueurs: joueurs
+                        .where(
+                          (j) =>
+                              j.id == lignes[i].joueurId ||
+                              !pris.contains(j.id),
+                        )
+                        .toList(),
+                    equipe: equipe,
+                    compact: true,
+                    onChange: (v) {
+                      lignes[i].joueurId = v;
+                      onChange();
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Compteur(
+                  valeur: lignes[i].nombre,
+                  onChange: (v) {
+                    lignes[i].nombre = v;
+                    onChange();
+                  },
+                ),
+                IconButton(
+                  onPressed: () {
+                    lignes.removeAt(i);
+                    onChange();
+                  },
+                  icon: const Icon(Icons.close, size: 17),
+                  color: Couleurs.gris2,
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.only(left: 4),
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+          ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () {
+              lignes.add(LigneCompteur());
+              onChange();
+            },
+            icon: const Icon(Icons.add, size: 16),
+            label: Text(libelleAjout),
+            style: TextButton.styleFrom(
+              foregroundColor: Couleurs.bleu,
+              padding: EdgeInsets.zero,
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

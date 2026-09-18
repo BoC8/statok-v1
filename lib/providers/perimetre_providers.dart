@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/bilan_equipe.dart';
+import '../models/categorie.dart';
 import '../models/equipe.dart';
 import '../models/joueur.dart';
 import '../models/perimetre.dart';
@@ -13,6 +14,7 @@ class DonneesPerimetre {
   const DonneesPerimetre({
     required this.titre,
     required this.sousTitre,
+    required this.categories,
     required this.equipes,
     required this.rencontres,
     required this.buts,
@@ -26,6 +28,9 @@ class DonneesPerimetre {
 
   /// Le niveau pour une équipe, le décompte pour une catégorie.
   final String sousTitre;
+
+  /// Les catégories du club, pour étiqueter les joueurs des classements.
+  final List<Categorie> categories;
 
   /// Les équipes du périmètre. Une seule si c'est une équipe.
   final List<Equipe> equipes;
@@ -110,6 +115,7 @@ final donneesPerimetreProvider =
       return DonneesPerimetre(
         titre: titre,
         sousTitre: sousTitre,
+        categories: d.categories,
         equipes: equipes,
         rencontres: rencontres,
         buts: d.buts

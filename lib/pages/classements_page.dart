@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/classement.dart';
-import '../providers/club_providers.dart';
 import '../providers/donnees_saison.dart';
 import '../theme/app_theme.dart';
 import '../widgets/classement_liste.dart';
 import '../widgets/communs.dart';
 import '../widgets/entete.dart';
 import '../widgets/filtres.dart';
+import 'joueur_page.dart';
 
 /// Les classements du club : buteurs, passeurs, cumul.
 ///
@@ -30,7 +30,6 @@ class _ClassementsPageState extends ConsumerState<ClassementsPage> {
   @override
   Widget build(BuildContext context) {
     final async = ref.watch(donneesSaisonProvider);
-    final saison = ref.watch(saisonCouranteProvider).value;
 
     return Scaffold(
       backgroundColor: Couleurs.craie,
@@ -39,8 +38,10 @@ class _ClassementsPageState extends ConsumerState<ClassementsPage> {
         child: Column(
           children: [
             EnteteSimple(
+              // Pas de sous-titre : il reprenait la saison, le filtre et
+              // les compétitions choisies — trois informations déjà
+              // visibles juste en dessous, sur leurs propres puces.
               titre: 'Classements',
-              sousTitre: _resume(async.value, saison?.libelle),
               selecteur: const SelecteurSaison(),
               dessous: Segments(
                 options: const [
@@ -64,7 +65,7 @@ class _ClassementsPageState extends ConsumerState<ClassementsPage> {
                 data: (d) => Column(
                   children: [
                     ChipsGroupes(
-                      categories: d.categories,
+                      donnees: d,
                       filtre: _filtre,
                       onChange: (f) => setState(() => _filtre = f),
                       avant: BoutonCompetitions(
@@ -93,9 +94,12 @@ class _ClassementsPageState extends ConsumerState<ClassementsPage> {
                               lignes: construireClassement(
                                 buts: d.butsFiltres(_filtre),
                                 joueurs: d.joueurs,
+                                categories: d.categories,
                                 type: _type,
                               ),
                               type: _type,
+                              onJoueur: (id) =>
+                                  JoueurPage.ouvrir(context, id),
                               messageVide: _messageVide,
                             ),
                           ),
@@ -110,35 +114,6 @@ class _ClassementsPageState extends ConsumerState<ClassementsPage> {
         ),
       ),
     );
-  }
-
-  /// « 26/27 · U16 – U18 M · toutes compétitions »
-  String _resume(DonneesSaison? d, String? saison) {
-    final morceaux = <String>[];
-    if (saison != null) morceaux.add(saison);
-
-    if (d != null) {
-      if (_filtre.equipeId != null) {
-        morceaux.add(d.nomEquipe(_filtre.equipeId!));
-      } else if (_filtre.categorieId != null) {
-        final c = d.categorie(_filtre.categorieId!);
-        morceaux.add(
-          '${c?.libelle ?? ''} ${_filtre.genre == 'F' ? 'F' : 'M'}'.trim(),
-        );
-      } else {
-        morceaux.add('tout le club');
-      }
-    }
-
-    if (_filtre.competitions.isNotEmpty) {
-      morceaux.add(_filtre.competitions.join(', '));
-    } else if (_filtre.types.isNotEmpty) {
-      morceaux.add(_filtre.types.join(', '));
-    } else {
-      morceaux.add('toutes compétitions');
-    }
-
-    return morceaux.join(' · ');
   }
 
   String get _messageVide => switch (_type) {

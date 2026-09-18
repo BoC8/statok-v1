@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../models/categorie.dart';
 import '../providers/donnees_saison.dart';
 import '../theme/app_theme.dart';
 import 'communs.dart';
@@ -11,17 +10,25 @@ import 'communs.dart';
 /// C'est la même leçon que pour les couleurs : une règle écrite une fois
 /// ne peut pas diverger entre deux pages.
 
-/// La rangée « Tout le club » + les six groupes.
+/// La rangée « Tout le club » suivie des groupes qui ont quelque chose
+/// à montrer.
+///
+/// ON NE PROPOSE QUE CE QUI EXISTE
+///   Afficher les six groupes en toutes circonstances conduit à des
+///   écrans vides : sur la saison 2025-2026, choisir « Seniors M »
+///   n'aurait rien ramené, sans qu'on comprenne pourquoi. Un groupe
+///   n'apparaît donc que si l'une de ses équipes a au moins une
+///   rencontre — jouée ou programmée — dans la saison affichée.
 class ChipsGroupes extends StatelessWidget {
   const ChipsGroupes({
     super.key,
-    required this.categories,
+    required this.donnees,
     required this.filtre,
     required this.onChange,
     this.avant,
   });
 
-  final List<Categorie> categories;
+  final DonneesSaison donnees;
   final FiltreClub filtre;
   final ValueChanged<FiltreClub> onChange;
 
@@ -33,14 +40,30 @@ class ChipsGroupes extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Les équipes qui ont au moins une rencontre cette saison.
+    final actives = donnees.rencontres.map((r) => r.equipeId).toSet();
+
+    // DU PLUS VIEUX AU PLUS JEUNE
+    //   Seniors d'abord, U14–U15 en dernier — l'inverse de l'ordre
+    //   d'affichage des autres écrans. C'est celui qu'on suit à l'oral
+    //   au club : on parle des seniors, puis on descend. Le tri porte
+    //   sur l'âge réel de la catégorie, pas sur sa position
+    //   d'affichage : voir `Categorie.rangAge`.
+    final categories = [...donnees.categories]
+      ..sort((a, b) => b.rangAge.compareTo(a.rangAge));
+
     final options = <(String, String)>[
       ('tout', 'Tout le club'),
       for (final c in categories)
+        // Masculins avant féminines, à l'intérieur de chaque catégorie.
         for (final genre in const ['M', 'F'])
-          (
-            _cle(c.id, genre),
-            '${c.libelle} ${genre == 'F' ? 'F' : 'M'}',
-          ),
+          if (donnees
+              .equipesDuGroupe(c.id, genre)
+              .any((e) => actives.contains(e.id)))
+            (
+              _cle(c.id, genre),
+              '${c.libelle} ${genre == 'F' ? 'F' : 'M'}',
+            ),
     ];
 
     final actif = filtre.categorieId == null

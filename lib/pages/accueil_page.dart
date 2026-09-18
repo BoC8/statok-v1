@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/classement.dart';
-import '../providers/club_providers.dart';
 import '../providers/donnees_saison.dart';
 import '../theme/app_theme.dart';
 import '../widgets/classement_liste.dart';
@@ -10,6 +9,7 @@ import '../widgets/communs.dart';
 import '../widgets/entete.dart';
 import '../widgets/filtres.dart';
 import '../widgets/ligne_match.dart';
+import 'joueur_page.dart';
 import 'perimetre_page.dart';
 
 /// L'accueil : ce qui arrive, ce qui vient de se passer, qui marque.
@@ -37,7 +37,6 @@ class _AccueilPageState extends ConsumerState<AccueilPage> {
   @override
   Widget build(BuildContext context) {
     final async = ref.watch(donneesSaisonProvider);
-    final saison = ref.watch(saisonCouranteProvider).value;
 
     return Scaffold(
       backgroundColor: Couleurs.craie,
@@ -45,12 +44,7 @@ class _AccueilPageState extends ConsumerState<AccueilPage> {
         bottom: false,
         child: Column(
           children: [
-            EnteteClub(
-              sousTitre: saison == null
-                  ? 'Football Club de la Pierre Bleue'
-                  : 'Saison ${saison.libelle}',
-              selecteur: const SelecteurSaison(),
-            ),
+            const EnteteClub(selecteur: SelecteurSaison()),
             Expanded(
               child: async.when(
                 loading: () =>
@@ -62,7 +56,7 @@ class _AccueilPageState extends ConsumerState<AccueilPage> {
                 data: (d) => Column(
                   children: [
                     ChipsGroupes(
-                      categories: d.categories,
+                      donnees: d,
                       filtre: _filtre,
                       onChange: (f) => setState(() => _filtre = f),
                     ),
@@ -87,6 +81,7 @@ class _AccueilPageState extends ConsumerState<AccueilPage> {
     final buteurs = construireClassement(
       buts: d.butsFiltres(_filtre),
       joueurs: d.joueurs,
+      categories: d.categories,
       type: TypeClassement.buteurs,
     );
 
@@ -144,6 +139,8 @@ class _AccueilPageState extends ConsumerState<AccueilPage> {
                       enfants: [
                         for (final r in jouees.take(4))
                           LigneMatch(
+                            onJoueur: (id) =>
+                                JoueurPage.ouvrir(context, id),
                             rencontre: r,
                             nomEquipe: d.nomEquipe(r.equipeId),
                             buts: d.butsDe(r.id),
@@ -162,6 +159,7 @@ class _AccueilPageState extends ConsumerState<AccueilPage> {
             enfant: ClassementListe(
               lignes: buteurs.take(3).toList(),
               type: TypeClassement.buteurs,
+              onJoueur: (id) => JoueurPage.ouvrir(context, id),
               messageVide: 'Aucun but enregistré pour cette sélection.',
             ),
           ),

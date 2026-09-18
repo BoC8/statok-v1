@@ -22,6 +22,7 @@ class LigneMatch extends StatefulWidget {
     this.tirsAuBut = const [],
     this.joueurs = const {},
     this.depliable = true,
+    this.onJoueur,
   });
 
   final Rencontre rencontre;
@@ -30,6 +31,13 @@ class LigneMatch extends StatefulWidget {
   final List<TirAuBut> tirsAuBut;
   final Map<String, Joueur> joueurs;
   final bool depliable;
+
+  /// Ouvre la fiche d'un joueur depuis la feuille de match.
+  ///
+  /// Le widget ne connaît pas les pages — c'est l'écran qui l'emploie
+  /// qui sait où mener. Sans ça, `widgets/` importerait `pages/`, et la
+  /// dépendance tournerait en rond.
+  final void Function(String joueurId)? onJoueur;
 
   @override
   State<LigneMatch> createState() => _LigneMatchState();
@@ -42,63 +50,77 @@ class _LigneMatchState extends State<LigneMatch> {
   Widget build(BuildContext context) {
     final r = widget.rencontre;
     final aDuDetail = widget.buts.isNotEmpty || widget.tirsAuBut.isNotEmpty;
+    final ouvrable = widget.depliable && aDuDetail;
 
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(13, 11, 6, 11),
-          child: Row(
-            children: [
-              _Date(date: r.date),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Column(
-                  children: [
-                    Text(
-                      r.libelleCompetition,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: Typo.texte(taille: 10.5, couleur: Couleurs.gris),
-                    ),
-                    const SizedBox(height: 7),
-                    _Affiche(
-                      rencontre: r,
-                      nomEquipe: widget.nomEquipe,
-                      milieu: ScoreAffiche(rencontre: r),
-                    ),
-                    if (r.auxTirsAuBut) ...[
-                      const SizedBox(height: 6),
+        // TOUTE LA LIGNE EST LE BOUTON
+        //
+        //   La flèche seule faisait une cible de vingt pixels collée au
+        //   bord de l'écran, à viser au pouce pendant qu'on fait
+        //   défiler. Le geste naturel est d'appuyer sur le match. La
+        //   flèche reste : elle ne sert plus à recevoir le doigt, mais à
+        //   annoncer que la ligne s'ouvre et à montrer si elle l'est.
+        InkWell(
+          onTap: ouvrable ? () => setState(() => _ouvert = !_ouvert) : null,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(13, 11, 6, 11),
+            child: Row(
+              children: [
+                _Date(date: r.date),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    children: [
                       Text(
-                        'tirs au but ${r.tabPour}–${r.tabContre}',
+                        r.libelleCompetition,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
                         style: Typo.texte(
                           taille: 10.5,
-                          graisse: 600,
-                          couleur: Couleurs.gris2,
+                          couleur: Couleurs.gris,
                         ),
                       ),
+                      const SizedBox(height: 7),
+                      _Affiche(
+                        rencontre: r,
+                        nomEquipe: widget.nomEquipe,
+                        milieu: ScoreAffiche(rencontre: r),
+                      ),
+                      if (r.auxTirsAuBut) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          'tirs au but ${r.tabPour}–${r.tabContre}',
+                          style: Typo.texte(
+                            taille: 10.5,
+                            graisse: 600,
+                            couleur: Couleurs.gris2,
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
-                ),
-              ),
-              if (widget.depliable && aDuDetail)
-                IconButton(
-                  onPressed: () => setState(() => _ouvert = !_ouvert),
-                  visualDensity: VisualDensity.compact,
-                  tooltip: _ouvert ? 'Masquer le détail' : 'Voir le détail',
-                  icon: AnimatedRotation(
-                    turns: _ouvert ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 180),
-                    child: const Icon(
-                      Icons.expand_more,
-                      size: 20,
-                      color: Couleurs.gris2,
-                    ),
                   ),
-                )
-              else
-                const SizedBox(width: 40),
-            ],
+                ),
+                // La largeur est réservée même sans flèche : sans ça,
+                // les affiches d'une même liste ne seraient pas alignées
+                // selon que la rencontre a une feuille de match ou non.
+                SizedBox(
+                  width: 40,
+                  child: ouvrable
+                      ? AnimatedRotation(
+                          turns: _ouvert ? 0.5 : 0,
+                          duration: const Duration(milliseconds: 180),
+                          child: const Icon(
+                            Icons.expand_more,
+                            size: 20,
+                            color: Couleurs.gris2,
+                          ),
+                        )
+                      : null,
+                ),
+              ],
+            ),
           ),
         ),
         if (_ouvert)
@@ -106,6 +128,7 @@ class _LigneMatchState extends State<LigneMatch> {
             buts: widget.buts,
             tirsAuBut: widget.tirsAuBut,
             joueurs: widget.joueurs,
+            onJoueur: widget.onJoueur,
           ),
       ],
     );
@@ -246,15 +269,19 @@ class _Feuille extends StatelessWidget {
     required this.buts,
     required this.tirsAuBut,
     required this.joueurs,
+    this.onJoueur,
   });
 
   final List<But> buts;
   final List<TirAuBut> tirsAuBut;
   final Map<String, Joueur> joueurs;
+  final void Function(String joueurId)? onJoueur;
 
   /// Compte les occurrences d'un joueur et trie du plus prolifique au
   /// moins, à égalité par ordre alphabétique.
-  List<({String nom, int nombre})> _compter(Iterable<String?> ids) {
+  List<({String id, String nom, int nombre})> _compter(
+    Iterable<String?> ids,
+  ) {
     final compte = <String, int>{};
     for (final id in ids) {
       if (id == null) continue;
@@ -264,6 +291,7 @@ class _Feuille extends StatelessWidget {
         compte.entries
             .map(
               (e) => (
+                id: e.key,
                 nom: joueurs[e.key]?.nomComplet ?? 'Joueur retiré',
                 nombre: e.value,
               ),
@@ -295,27 +323,36 @@ class _Feuille extends StatelessWidget {
         children: [
           Expanded(
             child: _Colonne(
-              icone: Icons.sports_soccer,
+              icone: iconeBut,
               titre: 'Buteurs',
+              onJoueur: onJoueur,
               lignes: [
-                for (final b in buteurs) (b.nom, b.nombre, false),
-                if (csc > 0) ('csc adverse', csc, true),
+                for (final b in buteurs) (b.id, b.nom, b.nombre, false),
+                // Le csc adverse n'a pas de fiche : identifiant vide.
+                if (csc > 0) ('', 'csc adverse', csc, true),
               ],
             ),
           ),
           const _Filet(),
           Expanded(
             child: _Colonne(
-              icone: Icons.ads_click,
+              icone: iconePasse,
               titre: 'Passeurs',
               italique: true,
-              lignes: [for (final p in passeurs) (p.nom, p.nombre, false)],
+              onJoueur: onJoueur,
+              lignes: [
+                for (final p in passeurs) (p.id, p.nom, p.nombre, false),
+              ],
             ),
           ),
           if (tirs.isNotEmpty) ...[
             const _Filet(),
             Expanded(
-              child: _ColonneTirs(tirs: tirs, joueurs: joueurs),
+              child: _ColonneTirs(
+                tirs: tirs,
+                joueurs: joueurs,
+                onJoueur: onJoueur,
+              ),
             ),
           ],
         ],
@@ -342,14 +379,16 @@ class _Colonne extends StatelessWidget {
     required this.titre,
     required this.lignes,
     this.italique = false,
+    this.onJoueur,
   });
 
   final IconData icone;
   final String titre;
 
-  /// (nom, nombre, estUnCsc)
-  final List<(String, int, bool)> lignes;
+  /// (identifiant, nom, nombre, estUnCsc)
+  final List<(String, String, int, bool)> lignes;
   final bool italique;
+  final void Function(String joueurId)? onJoueur;
 
   @override
   Widget build(BuildContext context) {
@@ -373,49 +412,54 @@ class _Colonne extends StatelessWidget {
         const SizedBox(height: 8),
         if (lignes.isEmpty)
           Text('—', style: Typo.texte(taille: 12.5, couleur: Couleurs.gris2)),
-        for (final (nom, nombre, estCsc) in lignes)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 3),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    nom,
-                    style: Typo.texte(
-                      taille: 12.5,
-                      graisse: italique ? 500 : 700,
-                      couleur: estCsc ? Couleurs.gris2 : Couleurs.nuit,
-                    ).copyWith(
-                      fontStyle: italique || estCsc
-                          ? FontStyle.italic
-                          : FontStyle.normal,
-                    ),
-                  ),
-                ),
-                if (nombre > 1) ...[
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 5,
-                      vertical: 1,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Couleurs.or,
-                      borderRadius: BorderRadius.circular(5),
-                    ),
+        for (final (id, nom, nombre, estCsc) in lignes)
+          InkWell(
+            onTap: onJoueur == null || id.isEmpty
+                ? null
+                : () => onJoueur!(id),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
                     child: Text(
-                      '×$nombre',
+                      nom,
                       style: Typo.texte(
-                        taille: 10.5,
-                        graisse: 800,
-                        couleur: Colors.white,
-                        hauteurLigne: 1.3,
+                        taille: 12.5,
+                        graisse: italique ? 500 : 700,
+                        couleur: estCsc ? Couleurs.gris2 : Couleurs.nuit,
+                      ).copyWith(
+                        fontStyle: italique || estCsc
+                            ? FontStyle.italic
+                            : FontStyle.normal,
                       ),
                     ),
                   ),
+                  if (nombre > 1) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Couleurs.or,
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      child: Text(
+                        '×$nombre',
+                        style: Typo.texte(
+                          taille: 10.5,
+                          graisse: 800,
+                          couleur: Colors.white,
+                          hauteurLigne: 1.3,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
       ],
@@ -424,10 +468,15 @@ class _Colonne extends StatelessWidget {
 }
 
 class _ColonneTirs extends StatelessWidget {
-  const _ColonneTirs({required this.tirs, required this.joueurs});
+  const _ColonneTirs({
+    required this.tirs,
+    required this.joueurs,
+    this.onJoueur,
+  });
 
   final List<TirAuBut> tirs;
   final Map<String, Joueur> joueurs;
+  final void Function(String joueurId)? onJoueur;
 
   @override
   Widget build(BuildContext context) {
@@ -450,27 +499,30 @@ class _ColonneTirs extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         for (final t in tirs)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 3),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 9,
-                  height: 9,
-                  margin: const EdgeInsets.only(top: 4, right: 6),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: t.marque ? Couleurs.vert : Couleurs.rouge,
+          InkWell(
+            onTap: onJoueur == null ? null : () => onJoueur!(t.joueurId),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 9,
+                    height: 9,
+                    margin: const EdgeInsets.only(top: 4, right: 6),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: t.marque ? Couleurs.vert : Couleurs.rouge,
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: Text(
-                    joueurs[t.joueurId]?.nomCourt ?? 'Joueur retiré',
-                    style: Typo.texte(taille: 12.5, graisse: 500),
+                  Expanded(
+                    child: Text(
+                      joueurs[t.joueurId]?.nomCourt ?? 'Joueur retiré',
+                      style: Typo.texte(taille: 12.5, graisse: 500),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
       ],

@@ -140,6 +140,95 @@ class _Case extends StatelessWidget {
   }
 }
 
+/// Les deux pictogrammes de l'application.
+///
+/// Un ballon veut dire « but » partout, une cible « passe décisive »
+/// partout — feuille de match, classement, fiche de joueur. Les réunir
+/// ici évite qu'ils divergent le jour où l'un des deux change.
+const iconeBut = Icons.sports_soccer;
+const iconePasse = Icons.ads_click;
+
+/// Un pictogramme et son compte : « ⚽ 2 ».
+///
+/// POURQUOI UN JETON PLUTÔT QUE DES MOTS
+///   « 2 buts · 1 passe » se lit ; « ⚽ 2  ◎ 1 » se reconnaît. Dans une
+///   liste où la même paire revient à chaque ligne, le mot n'apporte
+///   rien qu'on ne sache déjà, et il pousse le nom du joueur à
+///   l'étroit.
+class JetonStat extends StatelessWidget {
+  const JetonStat({
+    super.key,
+    required this.icone,
+    required this.nombre,
+    required this.fond,
+    required this.encre,
+  });
+
+  /// Le jeton des buts : or pâle sur brun.
+  factory JetonStat.buts(int nombre) => JetonStat(
+    icone: iconeBut,
+    nombre: nombre,
+    fond: Couleurs.orClair,
+    encre: const Color(0xFF7A4F00),
+  );
+
+  /// Celui des passes décisives : bleu pâle sur bleu.
+  factory JetonStat.passes(int nombre) => JetonStat(
+    icone: iconePasse,
+    nombre: nombre,
+    fond: Couleurs.bleuClair,
+    encre: Couleurs.bleu,
+  );
+
+  final IconData icone;
+  final int nombre;
+  final Color fond;
+  final Color encre;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(7, 3, 8, 3),
+      decoration: BoxDecoration(
+        color: fond,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icone, size: 12, color: encre),
+          const SizedBox(width: 5),
+          Text(
+            '$nombre',
+            style: Typo.chiffres(taille: 12, couleur: encre, largeur: 100),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Les jetons d'un joueur sur une ligne : buts puis passes, et rien
+/// quand il n'y a rien.
+class RangeeStats extends StatelessWidget {
+  const RangeeStats({super.key, required this.buts, required this.passes});
+
+  final int buts;
+  final int passes;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (buts > 0) JetonStat.buts(buts),
+        if (buts > 0 && passes > 0) const SizedBox(width: 6),
+        if (passes > 0) JetonStat.passes(passes),
+      ],
+    );
+  }
+}
+
 // =====================================================================
 //  Mise en page
 // =====================================================================
@@ -151,6 +240,7 @@ class Section extends StatelessWidget {
     this.titre,
     this.action,
     this.onAction,
+    this.dense = false,
     required this.enfant,
   });
 
@@ -159,16 +249,25 @@ class Section extends StatelessWidget {
   final VoidCallback? onAction;
   final Widget enfant;
 
+  /// Resserre l'espacement, pour les écrans de saisie.
+  ///
+  /// Les pages de consultation respirent : on les parcourt du pouce, et
+  /// l'air aide à séparer ce qui n'a pas de rapport. Un formulaire, lui,
+  /// se remplit d'un bout à l'autre — tout y a rapport, et chaque
+  /// intervalle est un défilement de plus pour le coach qui saisit son
+  /// match le dimanche soir.
+  final bool dense;
+
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 20),
+      padding: EdgeInsets.only(top: dense ? 12 : 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (titre != null)
             Padding(
-              padding: const EdgeInsets.fromLTRB(2, 0, 2, 9),
+              padding: EdgeInsets.fromLTRB(2, 0, 2, dense ? 6 : 9),
               child: Row(
                 children: [
                   Expanded(
