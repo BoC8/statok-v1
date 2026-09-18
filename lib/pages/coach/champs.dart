@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/equipe.dart';
 import '../../models/joueur.dart';
+import '../../models/recherche.dart';
 import '../../providers/auth_providers.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/communs.dart';
@@ -616,21 +617,17 @@ class _ListeJoueursState extends State<_ListeJoueurs> {
   Widget build(BuildContext context) {
     final source = _toutLeClub ? widget.tous : widget.eligibles;
     final masques = widget.tous.length - widget.eligibles.length;
-    final terme = _recherche.trim().toLowerCase();
+    final terme = _recherche.trim();
     final liste = terme.isEmpty
         ? source
-        : source
-              .where((j) => j.nomComplet.toLowerCase().contains(terme))
-              .toList();
+        : source.where((j) => correspond(j.nomComplet, terme)).toList();
 
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
       child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.75,
-        ),
+        constraints: BoxConstraints(maxHeight: hauteurFeuille(context)),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -849,27 +846,25 @@ class _ListeAdversairesState extends ConsumerState<_ListeAdversaires> {
   @override
   Widget build(BuildContext context) {
     final tous = ref.watch(adversairesProvider).value ?? const [];
-    final terme = _recherche.trim().toLowerCase();
+    final terme = _recherche.trim();
     final liste = terme.isEmpty
         ? tous
-        : tous.where((a) => a.nom.toLowerCase().contains(terme)).toList();
+        : tous.where((a) => correspond(a.nom, terme)).toList();
 
-    // On ne propose la création que si le nom tapé n'existe pas déjà,
-    // au caractère près : c'est ainsi qu'on évite « Derval » et
-    // « derval » côte à côte.
-    final existeExactement = tous.any(
-      (a) => a.nom.toLowerCase() == terme,
-    );
-    final peutCreer = terme.isNotEmpty && !existeExactement;
+    // On ne propose la création que si le nom tapé n'existe pas déjà —
+    // et « déjà » s'entend accents et casse mis de côté. C'est ainsi
+    // qu'on évite « Derval » et « derval » côte à côte, et surtout
+    // qu'un « Guemene 2 » tapé vite ne vienne pas doubler le « Guémené
+    // 2 » qui est en base.
+    final existeDeja = tous.any((a) => memeNom(a.nom, terme));
+    final peutCreer = terme.isNotEmpty && !existeDeja;
 
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
       child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.75,
-        ),
+        constraints: BoxConstraints(maxHeight: hauteurFeuille(context)),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

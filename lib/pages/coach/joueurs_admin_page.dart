@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/categorie.dart';
 import '../../models/generations.dart';
 import '../../models/joueur.dart';
+import '../../models/recherche.dart';
 import '../../providers/auth_providers.dart';
 import '../../providers/club_providers.dart';
 import '../../theme/app_theme.dart';
@@ -111,7 +112,7 @@ class _JoueursAdminPageState extends ConsumerState<JoueursAdminPage> {
         miens.any((j) => j.genre == 'M') && miens.any((j) => j.genre == 'F');
     if (!avecDeuxGenres) _genre = 'tout';
 
-    final terme = _recherche.trim().toLowerCase();
+    final terme = _recherche.trim();
     final liste =
         miens
             .where((j) => _avecInactifs || j.actif)
@@ -122,9 +123,7 @@ class _JoueursAdminPageState extends ConsumerState<JoueursAdminPage> {
             )
             .where((j) => _generation == null || j.generation == _generation)
             .where((j) => _genre == 'tout' || j.genre == _genre)
-            .where(
-              (j) => terme.isEmpty || j.nomComplet.toLowerCase().contains(terme),
-            )
+            .where((j) => correspond(j.nomComplet, terme))
             .toList()
           ..sort((a, b) {
             final parGeneration = rangGeneration(

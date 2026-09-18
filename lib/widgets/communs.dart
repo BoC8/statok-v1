@@ -334,7 +334,50 @@ class Vide extends StatelessWidget {
   }
 }
 
+/// La hauteur maximale d'une feuille glissée depuis le bas.
+///
+/// POURQUOI CE N'EST PAS UNE SIMPLE FRACTION DE L'ÉCRAN
+///   Une feuille plafonnée à 75 % de l'écran paraît raisonnable — puis
+///   le clavier s'ouvre. La feuille remonte alors de toute la hauteur du
+///   clavier, et sur un téléphone la somme des deux dépasse l'écran : il
+///   ne reste plus un pixel de voile à toucher pour refermer. Le coach
+///   qui ouvre la liste des joueurs par erreur se retrouve coincé, et
+///   c'est exactement ce qui a été remonté du terrain.
+///
+///   On réserve donc une bande en haut, calculée sur la hauteur
+///   **réellement libre** — écran moins clavier. Elle est toujours là,
+///   clavier ouvert ou fermé, et c'est par elle qu'on referme d'une
+///   tape à côté.
+double hauteurFeuille(BuildContext context, {double bande = 96}) {
+  final media = MediaQuery.of(context);
+  final libre = media.size.height - media.viewInsets.bottom;
+  final maxi = libre - bande;
+  // Un plancher pour l'absurde — petit écran tenu en paysage, clavier
+  // ouvert : mieux vaut une feuille serrée qu'une feuille invisible.
+  return maxi < 220.0 ? 220.0 : maxi;
+}
+
 /// La rangée d'étiquettes qui défile — le filtre de toute l'application.
+///
+/// ELLE PREND TOUTE LA LARGEUR, MÊME AVEC TROIS ÉTIQUETTES
+///   Son fond blanc et son trait du bas dessinent une barre sous le
+///   bandeau. Sans largeur imposée, le `Container` se contente de celle
+///   de son contenu : trois onglets courts — Résumé, Matchs, Classements
+///   — et la barre s'arrêtait au milieu de l'écran, laissant un bout de
+///   craie à sa droite.
+///
+/// ET LES ÉTIQUETTES SONT CENTRÉES — TANT QU'ELLES TIENNENT
+///   Trois onglets courts serrés à gauche d'une barre pleine largeur
+///   laissent un grand vide à droite : on dirait que la liste continue.
+///   Centrées, elles se lisent comme les trois onglets d'un écran, ce
+///   qu'elles sont.
+///
+///   Le centrage ne doit pas coûter le défilement, qui sert ailleurs à
+///   des rangées de dix catégories. D'où la contrainte de largeur
+///   minimale : la rangée occupe au moins toute la place disponible et
+///   centre alors ses puces dans le vide qui reste ; dès qu'elle
+///   déborde, il n'y a plus de vide à répartir, elle repart de la gauche
+///   et défile comme avant.
 class RangeeChips extends StatelessWidget {
   const RangeeChips({
     super.key,
@@ -351,32 +394,56 @@ class RangeeChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
       // Un Container n'accepte pas `color` et `decoration` en même temps :
       // la couleur passe dans la décoration.
       decoration: const BoxDecoration(
         color: Couleurs.blanc,
         border: Border(bottom: BorderSide(color: Couleurs.ligne)),
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-        child: Row(
-          children: [
-            for (final (valeur, libelle) in options)
-              Padding(
-                padding: const EdgeInsets.only(right: 7),
-                child: PuceFiltre(
-                  libelle: libelle,
-                  choisi: valeur == actif,
-                  onTap: () => onChoix(valeur),
-                ),
-              ),
-          ],
+      child: LayoutBuilder(
+        builder: (context, contraintes) => SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(
+            horizontal: _margeChips,
+            vertical: 11,
+          ),
+          child: ConstrainedBox(
+            // Largeur non bornée : on ne réclame aucun minimum, sans
+            // quoi la contrainte serait infinie et la mise en page
+            // s'arrêterait net.
+            constraints: BoxConstraints(
+              minWidth: contraintes.maxWidth.isFinite
+                  ? contraintes.maxWidth - _margeChips * 2
+                  : 0.0,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // L'écart se met entre les puces et non après chacune :
+                // une marge traînant derrière la dernière décalerait
+                // tout le centrage de sa largeur.
+                for (final (i, (valeur, libelle)) in options.indexed) ...[
+                  if (i > 0) const SizedBox(width: 7),
+                  PuceFiltre(
+                    libelle: libelle,
+                    choisi: valeur == actif,
+                    onTap: () => onChoix(valeur),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 }
+
+/// La marge latérale de la rangée, retirée de la largeur disponible pour
+/// que le centrage tombe juste.
+const _margeChips = 14.0;
 
 /// Une puce de filtre : arrondie, sombre quand elle est choisie.
 /// Publique parce que les trois écrans de filtre s'en servent.

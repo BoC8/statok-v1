@@ -53,7 +53,11 @@ class MatchsPageState extends ConsumerState<MatchsPage> {
               // Pas de sous-titre : la saison se lit dans le sélecteur
               // juste à droite, et le segment ci-dessous dit déjà ce
               // qu'on regarde.
-              titre: 'Calendrier',
+              // Le titre reprend le mot de l'onglet du bas : « Matchs ».
+              // Deux noms pour le même écran — « Calendrier » en haut,
+              // « Matchs » en bas — faisaient douter d'être au bon
+              // endroit.
+              titre: 'Matchs',
               selecteur: const SelecteurSaison(),
               dessous: archive
                   ? null

@@ -8,14 +8,10 @@ import 'pages/coquille.dart';
 import 'supabase_config.dart';
 import 'theme/app_theme.dart';
 
-/// REFONTE EN COURS
-///   Les quatre écrans publics sont en place derrière la barre
-///   d'onglets. L'espace coachs reste à écrire.
+/// Le point d'entrée.
 ///
-///   Les anciennes pages sont encore dans `lib/pages/` mais plus
-///   personne ne les atteint : elles interrogent des tables qui
-///   n'existent plus dans le schéma v2. On les supprimera au fur et à
-///   mesure que leurs remplaçantes seront validées.
+///   Les quatre écrans publics vivent derrière la barre d'onglets ;
+///   l'espace coachs s'ouvre depuis le dernier. Tout part de `Coquille`.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -42,6 +38,22 @@ class StatokApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       home: const Coquille(),
+
+      // UNE TAPE À CÔTÉ REFERME LE CLAVIER
+      //   Sur les formulaires de l'espace coachs, le clavier restait
+      //   ouvert tant qu'on ne validait pas : il mangeait la moitié de
+      //   l'écran, cachait le bouton « Enregistrer », et rien de ce
+      //   qu'on touchait à côté ne le faisait partir.
+      //
+      //   Ce détecteur est posé au-dessus de toute l'application, mais
+      //   il ne vole rien : un appui sur un bouton, un champ ou une
+      //   liste est réclamé par le widget concerné, qui est plus
+      //   profond dans l'arbre et l'emporte dans l'arène des gestes.
+      //   Seules les tapes qui ne visaient rien arrivent jusqu'ici.
+      builder: (context, enfant) => GestureDetector(
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        child: enfant,
+      ),
     );
   }
 }

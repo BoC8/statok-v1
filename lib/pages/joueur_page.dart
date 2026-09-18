@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/fiche_joueur.dart';
 import '../models/generations.dart';
-import '../providers/club_providers.dart';
 import '../providers/donnees_saison.dart';
 import '../theme/app_theme.dart';
 import '../widgets/communs.dart';
+import '../widgets/entete.dart';
 
 /// La fiche d'un licencié, sur la saison consultée.
 ///
@@ -20,6 +20,14 @@ import '../widgets/communs.dart';
 ///   n'en tient pas compte : elle montre tout ce que le joueur a fait
 ///   cette saison. Le périmètre était la fenêtre par laquelle on l'a
 ///   aperçu, pas le sujet.
+///
+/// ET ON CHANGE DE SAISON SANS SORTIR DE LA FICHE
+///   Le sélecteur du bandeau est celui de toute l'application : il
+///   modifie la saison consultée, pas seulement l'affichage de cette
+///   page. On reste donc sur le même licencié en passant d'une année à
+///   l'autre — c'est ce qu'on veut quand on cherche à voir si un joueur
+///   a progressé. Il reste présent même quand la fiche est vide : sans
+///   lui, une saison où le joueur n'a rien inscrit serait un cul-de-sac.
 class JoueurPage extends ConsumerWidget {
   const JoueurPage({super.key, required this.joueurId});
 
@@ -34,15 +42,14 @@ class JoueurPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final d = ref.watch(donneesSaisonProvider).value;
-    final saison = ref.watch(saisonCouranteProvider).value;
 
-    if (d == null || saison == null) {
+    if (d == null) {
       return const Scaffold(
         backgroundColor: Couleurs.craie,
         body: SafeArea(
           child: Column(
             children: [
-              BandeauRetour(titre: 'Licencié'),
+              BandeauRetour(titre: 'Licencié', action: SelecteurSaison()),
               Expanded(child: Center(child: CircularProgressIndicator())),
             ],
           ),
@@ -57,7 +64,7 @@ class JoueurPage extends ConsumerWidget {
         body: SafeArea(
           child: Column(
             children: [
-              BandeauRetour(titre: 'Licencié'),
+              BandeauRetour(titre: 'Licencié', action: SelecteurSaison()),
               Padding(
                 padding: EdgeInsets.all(14),
                 child: CarteBlanche(
@@ -90,18 +97,20 @@ class JoueurPage extends ConsumerWidget {
           children: [
             BandeauRetour(
               titre: joueur.nomComplet,
-              // Le bandeau porte désormais toute l'identité, puisque la
-              // carte sombre n'affiche plus que des chiffres. Pour un
-              // licencié parti, son départ prend la place de la saison :
-              // c'est ce qu'il faut savoir en premier devant une fiche
+              // Le bandeau porte toute l'identité, puisque la carte
+              // sombre n'affiche plus que des chiffres. La saison, elle,
+              // a quitté cette ligne : elle est désormais dans le
+              // sélecteur, à droite, et l'écrire deux fois à trente
+              // pixels d'écart ne servait personne. Reste la mention du
+              // départ, qu'il faut savoir en premier devant une fiche
               // qui semble s'être arrêtée.
               sousTitre: joueur.actif
                   ? '${libelleGeneration(joueur.generation)} · '
-                        '${joueur.genre == 'F' ? 'Féminine' : 'Masculin'} · '
-                        'saison ${saison.libelle}'
+                        '${joueur.genre == 'F' ? 'Féminine' : 'Masculin'}'
                   : '${libelleGeneration(joueur.generation)} · '
                         '${joueur.genre == 'F' ? 'Féminine' : 'Masculin'} · '
                         'a quitté le club',
+              action: const SelecteurSaison(),
             ),
             Expanded(
               child: ListView(
