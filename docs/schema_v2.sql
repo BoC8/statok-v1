@@ -211,7 +211,18 @@ create table rencontres (
   date_heure      timestamptz not null,
   domicile        bool not null,
   statut          text not null default 'programmee'
-                    check (statut in ('programmee', 'jouee', 'reportee', 'annulee')),
+                    check (statut in ('programmee', 'jouee')),
+
+  -- null : match disputé. 'nous' : le FCPB ne s'est pas présenté, donc
+  -- 0–3. 'eux' : l'adversaire ne s'est pas présenté, donc 3–0.
+  --
+  -- UN FORFAIT EST UN MATCH JOUÉ, PAS UN CINQUIÈME STATUT
+  --   Il compte au classement comme une victoire ou une défaite. Le
+  --   ranger parmi les matchs joués fait que tout ce qui les compte —
+  --   bilans, séries, pourcentages — continue de fonctionner sans rien
+  --   savoir des forfaits.
+  forfait         text check (forfait is null or forfait in ('nous', 'eux')),
+
   score_pour      int check (score_pour   >= 0),
   score_contre    int check (score_contre >= 0),
   tab_pour        int check (tab_pour     >= 0),
@@ -228,6 +239,19 @@ create table rencontres (
     (tab_pour is null and tab_contre is null) or
     (tab_pour is not null and tab_contre is not null
      and score_pour = score_contre and tab_pour <> tab_contre)
+  ),
+
+  -- le score d'un forfait n'est pas une saisie, c'est une conséquence
+  constraint rencontres_forfait_coherent check (
+    forfait is null or (
+      statut     = 'jouee'
+      and tab_pour   is null
+      and tab_contre is null
+      and (
+        (forfait = 'nous' and score_pour = 0 and score_contre = 3) or
+        (forfait = 'eux'  and score_pour = 3 and score_contre = 0)
+      )
+    )
   )
 );
 
@@ -533,4 +557,5 @@ from buts b
 join rencontres   r on r.id = b.rencontre_id
 join equipes      e on e.id = r.equipe_id
 join competitions c on c.id = r.competition_id
-where r.statut = 'jouee';
+where r.statut = 'jouee'
+  and r.forfait is null;   -- un forfait n'a pas de buteur

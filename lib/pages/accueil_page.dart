@@ -72,11 +72,30 @@ class _AccueilPageState extends ConsumerState<AccueilPage> {
   }
 
   Widget _corps(DonneesSaison d) {
+    final maintenant = DateTime.now();
     final rencontres = d.filtrer(_filtre);
-    final aVenir = rencontres.where((r) => r.programmee).toList().reversed
+
+    // TROIS ÉTATS, ET NON PLUS DEUX
+    //   « Programmée » disait seulement que le score n'avait pas été
+    //   saisi — un match de dimanche dernier resté sans résultat était
+    //   donc annoncé comme le prochain, jusqu'au mardi où le coach y
+    //   pensait. Le coup d'envoi tranche : avant, c'est à venir ;
+    //   pendant, c'est en cours ; après, ça n'a plus sa place ici et
+    //   c'est au coach de saisir le score.
+    //
+    //   `rencontres` descend du plus récent au plus ancien : les matchs
+    //   à venir se relisent donc à l'envers pour aller du plus proche
+    //   au plus lointain, et ceux en cours se remettent dans l'ordre du
+    //   coup d'envoi.
+    final enCours =
+        rencontres.where((r) => r.enCours(maintenant)).toList().reversed
+            .toList();
+    final aVenir = rencontres
+        .where((r) => r.aVenir(maintenant))
+        .toList()
+        .reversed
         .toList();
     final jouees = rencontres.where((r) => r.jouee).toList();
-    final maintenant = DateTime.now();
 
     final buteurs = construireClassement(
       buts: d.butsFiltres(_filtre),
@@ -94,13 +113,36 @@ class _AccueilPageState extends ConsumerState<AccueilPage> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(14, 0, 14, 28),
         children: [
+          // Rien quand rien ne se joue : une section « aucun match en
+          // cours » serait vraie six jours sur sept et n'apprendrait
+          // rien le septième.
+          if (enCours.isNotEmpty)
+            Section(
+              titre: enCours.length > 1 ? 'Matchs en cours' : 'Match en cours',
+              enfant: CarteBlanche(
+                enfant: _Liste(
+                  enfants: [
+                    for (final r in enCours)
+                      LigneProgrammation(
+                        rencontre: r,
+                        nomEquipe: d.nomEquipe(r.equipeId),
+                        enCours: true,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+
           Section(
             titre: 'Prochain match',
             enfant: aVenir.isEmpty
-                ? const CarteBlanche(
+                ? CarteBlanche(
                     enfant: Vide(
-                      message: 'Aucune rencontre programmée pour cette '
-                          'sélection.',
+                      message: enCours.isEmpty
+                          ? 'Aucune rencontre programmée pour cette '
+                                'sélection.'
+                          : 'Aucune autre rencontre programmée pour cette '
+                                'sélection.',
                     ),
                   )
                 : CarteProchainMatch(

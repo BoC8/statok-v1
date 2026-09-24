@@ -272,9 +272,7 @@ class CoachAccueilPage extends ConsumerWidget {
     return rencontres
         .where(
           (r) =>
-              r.programmee &&
-              miennes.contains(r.equipeId) &&
-              r.date.isBefore(maintenant),
+              miennes.contains(r.equipeId) && r.aSaisir(maintenant),
         )
         .toList();
   }

@@ -47,7 +47,24 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
   String? _adversaireId;
   late DateTime _date;
   bool _domicile = true;
-  String _statut = 'programmee';
+
+  /// Où en est le match, tel que le coach le choisit.
+  ///
+  /// QUATRE CHOIX À L'ÉCRAN, DEUX COLONNES EN BASE
+  ///   « Forfait nous » et « forfait eux » ne sont pas des statuts :
+  ///   ce sont des matchs joués, avec leur 3–0 réglementaire et la
+  ///   mention de qui ne s'est pas présenté. La traduction se fait au
+  ///   moment d'enregistrer — voir `_enregistrer`.
+  ///
+  ///   Les faire apparaître comme quatre cases côte à côte est ce qui
+  ///   compte pour le coach : le dimanche soir, il sait dans quel cas
+  ///   il est, il ne veut pas avoir à composer un statut et un score.
+  String _etat = 'programmee';
+
+  /// Un match réellement disputé : c'est le seul cas où le coach saisit
+  /// un score, une séance de tirs au but et une feuille de match.
+  bool get _disputee => _etat == 'jouee';
+
   final _scorePour = TextEditingController();
   final _scoreContre = TextEditingController();
 
@@ -97,7 +114,16 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
       _equipeId = r.equipeId;
       _date = r.date;
       _domicile = r.domicile;
-      _statut = r.statut;
+      // Un forfait revient en base comme un match joué : c'est la
+      // colonne `forfait` qui le distingue, et elle qui redonne au
+      // formulaire la case que le coach avait cochée.
+      if (r.forfaitDeNous) {
+        _etat = 'forfait_nous';
+      } else if (r.forfaitDEux) {
+        _etat = 'forfait_eux';
+      } else {
+        _etat = r.statut;
+      }
       _scorePour.text = r.scorePour?.toString() ?? '';
       _scoreContre.text = r.scoreContre?.toString() ?? '';
       _avecTirsAuBut = r.auxTirsAuBut;
@@ -395,16 +421,16 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
                 children: [
                   ChampSegments(
                     libelle: 'Statut',
-                    valeur: _statut,
+                    valeur: _etat,
                     options: const [
                       ('programmee', 'À venir'),
                       ('jouee', 'Joué'),
-                      ('reportee', 'Reporté'),
-                      ('annulee', 'Annulé'),
+                      ('forfait_nous', 'Forfait nous'),
+                      ('forfait_eux', 'Forfait eux'),
                     ],
-                    onChange: (v) => setState(() => _statut = v),
+                    onChange: (v) => setState(() => _etat = v),
                   ),
-                  if (_statut == 'jouee') ...[
+                  if (_disputee) ...[
                     Row(
                       children: [
                         Expanded(
@@ -429,11 +455,21 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
                   ] else
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10),
+                      // Sur un forfait, le score n'est pas une saisie
+                      // mais une conséquence : on l'annonce plutôt que
+                      // de laisser deux champs vides que personne ne
+                      // saurait remplir.
                       child: Text(
-                        _statut == 'programmee'
-                            ? 'Le score se renseignera après la rencontre.'
-                            : 'Un match reporté ou annulé ne porte pas de '
-                                  'score.',
+                        switch (_etat) {
+                          'forfait_nous' =>
+                            'Le FCPB ne s’est pas présenté : la rencontre '
+                                'est perdue 0–3, sans feuille de match.',
+                          'forfait_eux' =>
+                            'L’adversaire ne s’est pas présenté : la '
+                                'rencontre est gagnée 3–0, sans feuille de '
+                                'match.',
+                          _ => 'Le score se renseignera après la rencontre.',
+                        },
                         style: Typo.texte(
                           taille: 11,
                           couleur: Couleurs.gris,
@@ -447,7 +483,7 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
           ),
         ),
 
-        if (_statut == 'jouee') _blocButeurs(joueurs, equipeChoisie),
+        if (_disputee) _blocButeurs(joueurs, equipeChoisie),
 
         const SizedBox(height: 16),
         if (_erreur != null)
@@ -724,8 +760,30 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
 
     try {
       final option = options!.firstWhere((o) => o.cle == _cleCompetition);
-      final jouee = _statut == 'jouee';
       final reussis = _tirs.where((t) => t.marque).length;
+
+      // Les quatre cases de l'écran redeviennent ici ce que la base
+      // attend : un statut, un éventuel forfait, et un score.
+      final statut = _etat == 'programmee' ? 'programmee' : 'jouee';
+      final String? forfait = switch (_etat) {
+        'forfait_nous' => 'nous',
+        'forfait_eux' => 'eux',
+        _ => null,
+      };
+      int? scorePour;
+      int? scoreContre;
+      if (_disputee) {
+        scorePour = int.parse(_scorePour.text);
+        scoreContre = int.parse(_scoreContre.text);
+      } else if (_etat == 'forfait_nous') {
+        scorePour = 0;
+        scoreContre = 3;
+      } else if (_etat == 'forfait_eux') {
+        scorePour = 3;
+        scoreContre = 0;
+      }
+
+      final avecTirs = _disputee && _avecTirsAuBut;
 
       // Les compteurs redeviennent une ligne par but, comme la base les
       // attend. Voir `feuille_match.dart`.
@@ -744,15 +802,17 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
         phase: option.phase,
         dateHeure: _date,
         domicile: _domicile,
-        statut: _statut,
-        scorePour: jouee ? int.parse(_scorePour.text) : null,
-        scoreContre: jouee ? int.parse(_scoreContre.text) : null,
-        tabPour: jouee && _avecTirsAuBut ? reussis : null,
-        tabContre: jouee && _avecTirsAuBut
-            ? int.parse(_tabContre.text)
-            : null,
-        buts: jouee ? feuille.buts : const [],
-        tirsAuBut: jouee && _avecTirsAuBut
+        statut: statut,
+        forfait: forfait,
+        scorePour: scorePour,
+        scoreContre: scoreContre,
+        tabPour: avecTirs ? reussis : null,
+        tabContre: avecTirs ? int.parse(_tabContre.text) : null,
+        // Un forfait n'a pas de buteur. Passer une liste vide efface
+        // aussi ceux d'une saisie précédente, si le coach revient sur
+        // un match d'abord enregistré comme disputé.
+        buts: _disputee ? feuille.buts : const [],
+        tirsAuBut: avecTirs
             ? [
                 for (var i = 0; i < _tirs.length; i++)
                   TirAuBut(
@@ -806,7 +866,7 @@ class _FormRencontrePageState extends ConsumerState<FormRencontrePage> {
     if (_cleCompetition == null) return 'Choisissez une compétition.';
     if (_adversaireId == null) return "Choisissez l'adversaire.";
 
-    if (_statut == 'jouee') {
+    if (_disputee) {
       final pour = int.tryParse(_scorePour.text);
       final contre = int.tryParse(_scoreContre.text);
       if (pour == null || contre == null) {

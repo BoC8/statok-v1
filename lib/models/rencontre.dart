@@ -18,6 +18,7 @@ class Rencontre {
     required this.date,
     required this.domicile,
     required this.statut,
+    this.forfait,
     this.scorePour,
     this.scoreContre,
     this.tabPour,
@@ -47,8 +48,19 @@ class Rencontre {
   final DateTime date;
   final bool domicile;
 
-  /// `'programmee'`, `'jouee'`, `'reportee'` ou `'annulee'`.
+  /// `'programmee'` ou `'jouee'`.
   final String statut;
+
+  /// `null` pour un match disputé, `'nous'` si le FCPB ne s'est pas
+  /// présenté, `'eux'` si c'est l'adversaire.
+  ///
+  /// UN FORFAIT EST UN MATCH JOUÉ
+  ///   Il compte au classement comme une victoire ou une défaite, avec
+  ///   son 3–0 réglementaire. En faire un statut à part aurait obligé
+  ///   chaque bilan, chaque série de résultats et chaque pourcentage à
+  ///   connaître son existence pour penser à l'inclure. Rangé parmi les
+  ///   matchs joués, il est compté partout sans que rien ne le sache.
+  final String? forfait;
 
   final int? scorePour;
   final int? scoreContre;
@@ -58,6 +70,39 @@ class Rencontre {
   bool get jouee => statut == 'jouee';
   bool get programmee => statut == 'programmee';
   bool get auxTirsAuBut => tabPour != null && tabContre != null;
+
+  bool get estForfait => forfait != null;
+  bool get forfaitDeNous => forfait == 'nous';
+  bool get forfaitDEux => forfait == 'eux';
+
+  /// Ce que dure un match, faute de savoir quand il se termine
+  /// réellement.
+  ///
+  /// La base ne retient que le coup d'envoi — personne ne va saisir un
+  /// coup de sifflet final le dimanche après-midi. Deux heures couvrent
+  /// largement les deux mi-temps, la pause et les arrêts de jeu d'un
+  /// match amateur, prolongations comprises.
+  static const duree = Duration(hours: 2);
+
+  DateTime get finEstimee => date.add(duree);
+
+  /// Le coup d'envoi n'a pas encore été donné.
+  ///
+  /// C'est ce qui décide du « prochain match » : un match commencé, ou
+  /// terminé mais dont le score n'a pas encore été saisi, n'est plus à
+  /// venir, même si sa fiche est restée « programmée ».
+  bool aVenir(DateTime maintenant) => programmee && date.isAfter(maintenant);
+
+  /// Le match a commencé et n'est pas censé être fini.
+  bool enCours(DateTime maintenant) =>
+      programmee &&
+      !date.isAfter(maintenant) &&
+      finEstimee.isAfter(maintenant);
+
+  /// Le match aurait dû être terminé, et son résultat n'est pas saisi.
+  /// C'est le travail qui attend le coach.
+  bool aSaisir(DateTime maintenant) =>
+      programmee && !finEstimee.isAfter(maintenant);
 
   /// Le libellé affiché : la compétition, suivie de la phase quand il y
   /// en a une. « Départemental 1 · phase 2 ».
@@ -115,6 +160,7 @@ class Rencontre {
       date: DateTime.parse(j['date_heure'] as String).toLocal(),
       domicile: j['domicile'] as bool? ?? true,
       statut: j['statut'] as String? ?? 'programmee',
+      forfait: j['forfait'] as String?,
       scorePour: j['score_pour'] as int?,
       scoreContre: j['score_contre'] as int?,
       tabPour: j['tab_pour'] as int?,

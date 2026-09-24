@@ -206,7 +206,9 @@ class _LigneFiche extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = rencontre;
-    final enRetard = r.programmee && r.date.isBefore(DateTime.now());
+    // « En retard » commence à la fin estimée du match, pas au coup
+    // d'envoi : réclamer un score à la mi-temps n'a pas de sens.
+    final maintenant = DateTime.now();
 
     return InkWell(
       onTap: () => FormRencontrePage.ouvrir(context, rencontre: r),
@@ -251,7 +253,7 @@ class _LigneFiche extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            _Etat(rencontre: r, enRetard: enRetard),
+            _Etat(rencontre: r, maintenant: maintenant),
             const Icon(Icons.chevron_right, size: 16, color: Couleurs.gris2),
           ],
         ),
@@ -262,30 +264,42 @@ class _LigneFiche extends StatelessWidget {
 
 /// Le score s'il existe, sinon l'état de la fiche.
 ///
-/// La pastille orange marque les rencontres passées restées « à venir » :
-/// c'est le travail qui attend le coach.
+/// La pastille orange marque les rencontres terminées restées « à
+/// venir » : c'est le travail qui attend le coach. Elle n'apparaît
+/// qu'une fois le match fini — pendant, la fiche dit « en cours », et
+/// il n'y a rien à reprocher à personne.
 class _Etat extends StatelessWidget {
-  const _Etat({required this.rencontre, required this.enRetard});
+  const _Etat({required this.rencontre, required this.maintenant});
 
   final Rencontre rencontre;
-  final bool enRetard;
+  final DateTime maintenant;
 
   @override
   Widget build(BuildContext context) {
     if (rencontre.jouee) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ScoreAffiche(rencontre: rencontre),
-          const SizedBox(width: 4),
-        ],
+      return Padding(
+        padding: const EdgeInsets.only(right: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            ScoreAffiche(rencontre: rencontre),
+            if (rencontre.estForfait) ...[
+              const SizedBox(height: 4),
+              const PastilleForfait(),
+            ],
+          ],
+        ),
       );
     }
 
-    final (texte, fond, encre) = switch (rencontre.statut) {
-      'reportee' => ('reporté', Couleurs.craie, Couleurs.gris),
-      'annulee' => ('annulé', Couleurs.craie, Couleurs.gris),
-      _ when enRetard => (
+    final (texte, fond, encre) = switch (rencontre) {
+      _ when rencontre.enCours(maintenant) => (
+        'en cours',
+        const Color(0xFFE2F5EC),
+        Couleurs.vert,
+      ),
+      _ when rencontre.aSaisir(maintenant) => (
         'à saisir',
         Couleurs.orClair,
         const Color(0xFF7A4F00),

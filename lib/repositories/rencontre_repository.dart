@@ -30,7 +30,7 @@ class RencontreRepository {
         .from('rencontres')
         .select(
           'id, saison_id, equipe_id, phase, date_heure, domicile, statut, '
-          'score_pour, score_contre, tab_pour, tab_contre, '
+          'forfait, score_pour, score_contre, tab_pour, tab_contre, '
           'adversaires(nom), competitions(nom, type)',
         )
         .eq('saison_id', saisonId)

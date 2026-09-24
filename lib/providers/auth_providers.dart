@@ -91,13 +91,23 @@ final equipesModifiablesProvider =
       if (profil == null) return const [];
 
       final toutes = await ref.watch(equipesProvider.future);
+      final categories = await ref.watch(categoriesProvider.future);
       final deLaSaison = await ref
           .watch(clubRepositoryProvider)
           .equipesDeLaSaison(saisonId);
 
-      return toutes
-          .where((e) => deLaSaison.contains(e.id) && profil.peutEcrireEquipe(e))
-          .toList();
+      // L'ordre du club, pas celui de la base : Seniors d'abord, U15 en
+      // dernier, masculins avant féminines. Il est décidé une fois ici
+      // et les trois écrans coachs en héritent — liste déroulante du
+      // formulaire, filtre des rencontres, écran d'accueil.
+      return rangerEquipes(
+        toutes
+            .where(
+              (e) => deLaSaison.contains(e.id) && profil.peutEcrireEquipe(e),
+            )
+            .toList(),
+        categories,
+      );
     });
 
 /// Les compétitions d'une équipe, pour une saison donnée.

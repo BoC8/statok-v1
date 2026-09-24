@@ -140,8 +140,43 @@ class _Case extends StatelessWidget {
   }
 }
 
-/// Les deux pictogrammes de l'application.
+/// La mention « forfait », sous le score d'une rencontre.
 ///
+/// POURQUOI UNE MENTION ET NON UN SCORE PARTICULIER
+///   Un forfait s'affiche 3–0 comme n'importe quel 3–0, parce que c'est
+///   bien ce qui a été compté au classement. Mais lu seul, ce 3–0
+///   raconte un match qui n'a pas eu lieu. La pastille rétablit la
+///   vérité sans toucher au score : on lit le résultat d'abord, sa
+///   nature ensuite.
+///
+///   Elle reste discrète — gris sur craie, comme la ligne « tirs au
+///   but » juste à côté. Ce n'est ni une alerte ni un reproche.
+class PastilleForfait extends StatelessWidget {
+  const PastilleForfait({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: Couleurs.craie,
+        border: Border.all(color: Couleurs.ligne),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        'forfait',
+        style: Typo.texte(
+          taille: 9.5,
+          graisse: 700,
+          couleur: Couleurs.gris,
+          hauteurLigne: 1.3,
+        ),
+      ),
+    );
+  }
+}
+
+/// Les deux pictogrammes de l'application.
 /// Un ballon veut dire « but » partout, une cible « passe décisive »
 /// partout — feuille de match, classement, fiche de joueur. Les réunir
 /// ici évite qu'ils divergent le jour où l'un des deux change.

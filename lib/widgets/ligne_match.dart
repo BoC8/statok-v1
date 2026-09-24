@@ -88,6 +88,10 @@ class _LigneMatchState extends State<LigneMatch> {
                         nomEquipe: widget.nomEquipe,
                         milieu: ScoreAffiche(rencontre: r),
                       ),
+                      if (r.estForfait) ...[
+                        const SizedBox(height: 6),
+                        const PastilleForfait(),
+                      ],
                       if (r.auxTirsAuBut) ...[
                         const SizedBox(height: 6),
                         Text(
@@ -136,15 +140,25 @@ class _LigneMatchState extends State<LigneMatch> {
 }
 
 /// Une rencontre à venir : même mise en page, l'heure à la place du score.
+///
+/// ET LA MÊME LIGNE SERT AUX MATCHS EN COURS
+///   Entre le coup d'envoi et la fin estimée, il n'y a toujours pas de
+///   score à montrer — rien ne change donc dans la mise en page. Seule
+///   la pastille du milieu passe au vert et dit « en cours », l'heure
+///   glissant en dessous : à quinze heures trente, savoir que le match
+///   a commencé à quinze heures vaut mieux que de lire « 15h00 » sans
+///   savoir si on l'a manqué.
 class LigneProgrammation extends StatelessWidget {
   const LigneProgrammation({
     super.key,
     required this.rencontre,
     required this.nomEquipe,
+    this.enCours = false,
   });
 
   final Rencontre rencontre;
   final String nomEquipe;
+  final bool enCours;
 
   @override
   Widget build(BuildContext context) {
@@ -174,11 +188,11 @@ class LigneProgrammation extends StatelessWidget {
                       vertical: 3,
                     ),
                     decoration: BoxDecoration(
-                      color: Couleurs.nuit,
+                      color: enCours ? Couleurs.vert : Couleurs.nuit,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      heureDe(rencontre.date),
+                      enCours ? 'en cours' : heureDe(rencontre.date),
                       style: Typo.texte(
                         taille: 11,
                         graisse: 800,
@@ -188,6 +202,17 @@ class LigneProgrammation extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (enCours) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'coup d’envoi ${heureDe(rencontre.date)}',
+                    style: Typo.texte(
+                      taille: 10.5,
+                      graisse: 600,
+                      couleur: Couleurs.gris2,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

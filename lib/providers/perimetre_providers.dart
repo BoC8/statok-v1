@@ -45,11 +45,35 @@ class DonneesPerimetre {
 
   List<Rencontre> get jouees => rencontres.where((r) => r.jouee).toList();
 
-  /// Les rencontres à venir, de la plus proche à la plus lointaine.
+  /// Les rencontres dont le score n'est pas saisi, de la plus proche à
+  /// la plus lointaine.
+  ///
+  /// Y compris celles déjà passées : dans la liste des matchs, une
+  /// rencontre de dimanche dernier restée sans résultat doit continuer
+  /// de se voir — c'est ce qui rappelle qu'elle attend sa saisie.
   List<Rencontre> get aVenir =>
       rencontres.where((r) => r.programmee).toList().reversed.toList();
 
-  Rencontre? get prochaine => aVenir.isEmpty ? null : aVenir.first;
+  /// Les rencontres en train de se jouer, dans l'ordre du coup d'envoi.
+  List<Rencontre> enCours(DateTime maintenant) =>
+      rencontres.where((r) => r.enCours(maintenant)).toList().reversed
+          .toList();
+
+  /// Le prochain match — au sens strict : celui dont le coup d'envoi
+  /// n'a pas encore été donné.
+  ///
+  /// C'est là que la nuance avec `aVenir` compte. Annoncer comme
+  /// « prochain match » une rencontre déjà jouée mais non saisie est la
+  /// pire des erreurs pour un parent qui consulte l'application le
+  /// dimanche matin : il se déplace pour un match de la semaine
+  /// d'avant.
+  Rencontre? prochaine(DateTime maintenant) {
+    for (final r in aVenir) {
+      if (r.aVenir(maintenant)) return r;
+    }
+    return null;
+  }
+
   Rencontre? get derniere => jouees.isEmpty ? null : jouees.first;
 
   List<But> butsDe(String rencontreId) =>

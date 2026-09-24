@@ -113,7 +113,8 @@ class _PerimetrePageState extends ConsumerState<PerimetrePage> {
 
   List<Widget> _ongletResume(DonneesPerimetre d) {
     final maintenant = DateTime.now();
-    final prochaine = d.prochaine;
+    final enCours = d.enCours(maintenant);
+    final prochaine = d.prochaine(maintenant);
     final derniere = d.derniere;
     final decisifs = construireClassement(
       buts: d.buts,
@@ -124,6 +125,25 @@ class _PerimetrePageState extends ConsumerState<PerimetrePage> {
 
     return [
       Section(titre: 'Bilan de la saison', enfant: _Bilan(donnees: d)),
+
+      if (enCours.isNotEmpty)
+        Section(
+          titre: enCours.length > 1 ? 'Matchs en cours' : 'Match en cours',
+          enfant: CarteBlanche(
+            enfant: Column(
+              children: [
+                for (final (i, r) in enCours.indexed) ...[
+                  if (i > 0) const Divider(height: 1),
+                  LigneProgrammation(
+                    rencontre: r,
+                    nomEquipe: _nomEquipe(d, r.equipeId),
+                    enCours: true,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
 
       if (prochaine != null)
         Section(
